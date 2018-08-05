@@ -232,6 +232,10 @@ push_promise_frame(StreamIdent, NewStreamIdent, HeaderTableInfo-Headers, Options
     int32(StreamIdent),
     PadLenBytes, int32(R_NewStreamIdent), Data, PadBytes, !.
 
+ping_frame(Data, Ack) -->
+    { if_(Ack = true, Flags #= 0x1, Flags #= 0x0),
+      length(Data, 8) },
+    frame(0x6, Flags, 0x0, Data), !.
 
 connection_preface(`PRI * HTTP/2.0\r\n\r\nSM\r\n\r\n`).
 

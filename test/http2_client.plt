@@ -71,6 +71,9 @@ test('Unpack headers padding') :-
                indexed(':path'-'/')],
     Pad = 7.
 
+% TODO: tests for priority frame
+% TODO: tests for rst frame
+
 test('Pack settings frame') :-
     phrase(http2_client:settings_frame([header_table_size-10, max_frame_size-0x2345]),
            Bytes),
@@ -138,5 +141,15 @@ test('Unpack push promise frame with opts') :-
                indexed(':path'-'/')],
     Pad = 11,
     End = false.
+
+test('Pack ping frame') :-
+    phrase(http2_client:ping_frame([1,2,3,4,5,6,7,8], false), Bytes),
+    Bytes = [0,0,8,6,0,0,0,0,0,1,2,3,4,5,6,7,8].
+
+test('Unpack ping frame') :-
+    Bytes = [0,0,8,6,1,0,0,0,0,1,2,3,4,5,6,7,8],
+    phrase(http2_client:ping_frame(Data, Ack), Bytes),
+    Ack = true,
+    Data = [1,2,3,4,5,6,7,8].
 
 :- end_tests(http2_client).
