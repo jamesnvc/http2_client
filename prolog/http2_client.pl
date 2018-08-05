@@ -194,6 +194,45 @@ setting_name_num(N, N).
 settings_ack_frame -->
     int24(0), [0x4, 0x1], int32(0).
 
+:- record push_promise_opts(end_headers=true,
+                            padded=0).
+:- predicate_options(push_promise_frame//4, 4,
+                     [end_headers(boolean),
+                      padded(integer)]).
+
+%! push_promise_frame(?StreamIdent, ?NewStreamID, ?Headers, ?Options)//
+push_promise_frame(StreamIdent, NewStreamIdent, HeaderTableInfo-Headers, Options) -->
+    { make_push_promise_opts(Options, Opts),
+      push_promise_opts_padded(Opts, PadLen),
+      push_promise_opts_end_headers(Opts, EndHeaders),
+
+      R_NewStreamIdent #= NewStreamIdent mod 2^32,
+
+      % As noted in header_frame//4, it would be nice if we could do
+      % this in a better way...
+      when(nonvar(Headers);ground(Data),
+           phrase(hpack(HeaderTableInfo, Headers), Data)),
+
+      delay(length(Data, DataLength)),
+      zcompare(Comp, PadLen, 0),
+      if_(Comp = (=),
+          (PadFlag #= 0,
+           Length #= 4 + DataLength,
+           PadLenBytes = [], PadBytes = []),
+          (PadFlag #= 0x8,
+           Length #= 4 + DataLength + PadLen + 1,
+           PadLenBytes = [PadLen],
+           replicate(PadLen, 0, PadBytes))),
+
+      if_(EndHeaders = true, EndFlag #= 0x4, EndFlag #= 0x0),
+
+      Flags #= EndFlag \/ PadFlag },
+    int24(Length),
+    [0x5, Flags],
+    int32(StreamIdent),
+    PadLenBytes, int32(R_NewStreamIdent), Data, PadBytes, !.
+
+
 connection_preface(`PRI * HTTP/2.0\r\n\r\nSM\r\n\r\n`).
 
 http2_open(_, _, _).

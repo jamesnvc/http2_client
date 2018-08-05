@@ -100,4 +100,43 @@ test('Settings ack') :-
     phrase(http2_client:settings_ack_frame, Bytes),
     Bytes = [0, 0, 0, 4, 1, 0, 0, 0, 0].
 
+test('Pack push promise frame') :-
+    HeaderInfo = 4096-[]-_,
+    Headers = [indexed(':method'-'GET'),
+               indexed(':scheme'-https),
+               indexed(':path'-'/')],
+    phrase(http2_client:push_promise_frame(0, 1234, HeaderInfo-Headers, []),
+           Bytes),
+    Bytes = [0,0,7,5,4,0,0,0,0,0,0,4,210,130,135,132].
+
+test('Unpack push promise frame') :-
+    Bytes = [0,0,7,5,4,0,0,0,0,0,0,4,210,130,135,132],
+    phrase(
+        http2_client:push_promise_frame(StreamId, PromisedStreamId, HeaderInfo-Headers,
+                                        [padded(Pad), end_headers(End)]),
+           Bytes),
+    StreamId = 0,
+    PromisedStreamId = 1234,
+    HeaderInfo = 4096-[]-_,
+    Headers = [indexed(':method'-'GET'),
+               indexed(':scheme'-https),
+               indexed(':path'-'/')],
+    Pad = 0,
+    End = true.
+
+test('Unpack push promise frame with opts') :-
+    Bytes = [0,0,19,5,8,0,0,0,0,11,0,0,4,210,130,135,132,0,0,0,0,0,0,0,0,0,0,0],
+    phrase(
+        http2_client:push_promise_frame(StreamId, PromisedStreamId, HeaderInfo-Headers,
+                                        [padded(Pad), end_headers(End)]),
+           Bytes),
+    StreamId = 0,
+    PromisedStreamId = 1234,
+    HeaderInfo = 4096-[]-_,
+    Headers = [indexed(':method'-'GET'),
+               indexed(':scheme'-https),
+               indexed(':path'-'/')],
+    Pad = 11,
+    End = false.
+
 :- end_tests(http2_client).
