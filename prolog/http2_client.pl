@@ -232,6 +232,7 @@ push_promise_frame(StreamIdent, NewStreamIdent, HeaderTableInfo-Headers, Options
     int32(StreamIdent),
     PadLenBytes, int32(R_NewStreamIdent), Data, PadBytes, !.
 
+%! ping_frame(?Data:list, ?Ack:boolean)//
 ping_frame(Data, Ack) -->
     { if_(Ack = true, Flags #= 0x1, Flags #= 0x0),
       length(Data, 8) },
