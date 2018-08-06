@@ -253,6 +253,19 @@ goaway_frame(LastStreamId, Error, Data) -->
     int31(LastStreamId), int32(Error),
     Data.
 
+%! window_update_frame(?StreamIdent, ?Increment)//
+window_update_frame(StreamIdent, Increment) -->
+    int24(4),  [0x8, 0],
+    int31(StreamIdent),
+    int31(Increment).
+
+continuation_frame(StreamIdent, HeaderTableInfo-Headers, End) -->
+    { when(nonvar(Headers);ground(Data),
+           phrase(hpack(HeaderTableInfo, Headers), Data)),
+      delay(length(Data, Length)),
+      if_(End = true, Flags #= 0x4, Flags #= 0x0) },
+    int24(Length), [0x9, Flags], int31(StreamIdent),
+    Data.
 
 connection_preface(`PRI * HTTP/2.0\r\n\r\nSM\r\n\r\n`).
 
