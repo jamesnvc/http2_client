@@ -22,6 +22,13 @@ int24(I) -->
       I #= A * (2^16) + B * (2^8) + C },
     [A, B, C].
 
+int31(I) -->
+    { [A, B, C, D] ins 0..255,
+      A in 0..255,
+      A_ #= A mod 128,
+      I #= A_ * (2^24) + B * (2^16) + C * (2^8) + D },
+    [A, B, C, D].
+
 int32(I) -->
     { [A, B, C, D] ins 0..255,
       I #= A * (2^24) + B * (2^16) + C * (2^8) + D },
@@ -45,7 +52,7 @@ frame(Type, Flags, Ident, Payload) -->
       Ident in 0..IdentMax },
     int24(Length),
     [Type, Flags],
-    int32(Ident),
+    int31(Ident),
     Payload.
 
 % https://httpwg.org/specs/rfc7540.html#FrameTypes
@@ -87,7 +94,7 @@ data_frame(StreamIdent, Data, Options) -->
       if_(StreamEnd = true, EndFlag #= 0x1, EndFlag #= 0x0),
 
       Flags #= EndFlag \/ PadFlag },
-    int24(Length), [0x0, Flags], int32(StreamIdent),
+    int24(Length), [0x0, Flags], int31(StreamIdent),
     PadLenBytes, Data, PadBytes, !.
 
 :- record header_opts(end_stream=false,
@@ -149,7 +156,7 @@ header_frame(StreamIdent, Headers, Size-Table0-Table1, Options) -->
 
       Flags #= EndStreamFlag \/ EndHeadersFlag \/ IsPriorityFlag \/ PadFlag },
     int24(Length), [0x1, Flags],
-    int32(StreamIdent),
+    int31(StreamIdent),
     PadLenBytes, Data, PadBytes, !.
 
 %! priority_frame(?StreamIdent:integer, ?Exclusive:boolean, ?StreamDep:integer, ?Weight:integer)//
@@ -159,12 +166,12 @@ priority_frame(StreamIdent, Exclusive, StreamDep, Weight) -->
       StreamDep #< 2^31,
       E_StreamDep #= ExclusiveFlag \/ StreamDep },
     int24(5), [0x02, 0],
-    int32(StreamIdent),
+    int31(StreamIdent),
     int32(E_StreamDep), [Weight].
 
 %! rst_frame(?StreamIdent:integer, ?ErrorCode:integer)//
 rst_frame(StreamIdent, ErrCode) -->
-    int24(4), [0x3, 0], int32(StreamIdent), int32(ErrCode).
+    int24(4), [0x3, 0], int31(StreamIdent), int32(ErrCode).
 
 %! settings_frame(?Settings:list)//
 settings_frame(Settings) -->
@@ -229,7 +236,7 @@ push_promise_frame(StreamIdent, NewStreamIdent, HeaderTableInfo-Headers, Options
       Flags #= EndFlag \/ PadFlag },
     int24(Length),
     [0x5, Flags],
-    int32(StreamIdent),
+    int31(StreamIdent),
     PadLenBytes, int32(R_NewStreamIdent), Data, PadBytes, !.
 
 %! ping_frame(?Data:list, ?Ack:boolean)//
@@ -241,10 +248,9 @@ ping_frame(Data, Ack) -->
 %! goaway_frame(?LastStreamId, ?ErrorCode, ?Data)//
 goaway_frame(LastStreamId, Error, Data) -->
     { delay(length(Data, DataLength)),
-      Length #= DataLength + 4 + 4,
-      LastStreamId_ #= LastStreamId mod 2^32 },
+      Length #= DataLength + 4 + 4 },
     int24(Length), [0x7, 0], int32(0),
-    int32(LastStreamId_), int32(Error),
+    int31(LastStreamId), int32(Error),
     Data.
 
 
