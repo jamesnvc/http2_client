@@ -238,6 +238,16 @@ ping_frame(Data, Ack) -->
       length(Data, 8) },
     frame(0x6, Flags, 0x0, Data), !.
 
+%! goaway_frame(?LastStreamId, ?ErrorCode, ?Data)//
+goaway_frame(LastStreamId, Error, Data) -->
+    { delay(length(Data, DataLength)),
+      Length #= DataLength + 4 + 4,
+      LastStreamId_ #= LastStreamId mod 2^32 },
+    int24(Length), [0x7, 0], int32(0),
+    int32(LastStreamId_), int32(Error),
+    Data.
+
+
 connection_preface(`PRI * HTTP/2.0\r\n\r\nSM\r\n\r\n`).
 
 http2_open(_, _, _).

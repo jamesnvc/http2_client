@@ -152,4 +152,19 @@ test('Unpack ping frame') :-
     Ack = true,
     Data = [1,2,3,4,5,6,7,8].
 
+test('Pack goaway frame') :-
+    phrase(http2_client:goaway_frame(1234, 9876, `Some debug info`),
+           Bytes),
+    Bytes = [0,0,23,7,0,0,0,0,0,0,0,4,210,0,0,38,148,83,111,109,101,32,100,101,
+             98,117,103,32,105,110,102,111].
+
+test('Unpack goaway frame') :-
+    Bytes = [0,0,23,7,0,0,0,0,0,0,0,4,210,0,0,38,148,83,111,109,101,32,100,101,
+             98,117,103,32,105,110,102,111],
+    phrase(http2_client:goaway_frame(LastId, ErrCode, DebugData),
+           Bytes),
+    LastId = 1234,
+    ErrCode = 9876,
+    DebugData = `Some debug info`.
+
 :- end_tests(http2_client).
