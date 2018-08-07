@@ -226,7 +226,16 @@ settings_ack_frame -->
                      [end_headers(boolean),
                       padded(integer)]).
 
-%! push_promise_frame(?StreamIdent, ?NewStreamID, ?Headers, ?Options)//
+%! push_promise_frame(?StreamIdent:integer, ?NewStreamID:integer, ?HeaderInfo, ?Options:list)//
+%
+%  Options:
+%
+%  * padded(PadLength)
+%    If non-zero, the stream will be padded with =PadLength= zero bytes
+%  * end_stream(End)
+%    If true, this frame indicates the end of the stream
+%
+%  @arg HeaderInfo Information to be passed to hpack:hpack//2  =| HeaderInfo = HeaderTableSize-TableIn-TableOut-HeaderList |=
 push_promise_frame(StreamIdent, NewStreamIdent, HeaderTableInfo-Headers, Options) -->
     { make_push_promise_opts(Options, Opts),
       push_promise_opts_padded(Opts, PadLen),
@@ -280,6 +289,9 @@ window_update_frame(StreamIdent, Increment) -->
     int31(StreamIdent),
     int31(Increment).
 
+%! continuation_frame(?StreamIdent:integer, ?HeaderInfo, ?End:boolean)//
+%  @arg HeaderInfo Information to be passed to hpack:hpack//2
+%        =| HeaderInfo = HeaderTableSize-TableIn-TableOut-HeaderList |=
 continuation_frame(StreamIdent, HeaderTableInfo-Headers, End) -->
     { when(nonvar(Headers);ground(Data),
            phrase(hpack(HeaderTableInfo, Headers), Data)),
