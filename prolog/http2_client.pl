@@ -24,9 +24,13 @@ int24(I) -->
 
 int31(I) -->
     { [A, B, C, D] ins 0..255,
-      A in 0..255,
+      A_ in 0..127,
       A_ #= A mod 128,
-      I #= A_ * (2^24) + B * (2^16) + C * (2^8) + D },
+      I in 0..0x7fff_ffff,
+      I #= A_ * (2^24) + B * (2^16) + C * (2^8) + D,
+      % Annoying thing with StreamIdent: we want to ignore the high
+      % bit when receiving, but set it to zero when sending
+      (ground(I) -> A #= A_ ; true) },
     [A, B, C, D].
 
 int32(I) -->
