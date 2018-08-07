@@ -85,6 +85,9 @@ frame(Type, Flags, Ident, Payload) -->
 %     If non-zero, the stream will be padded with that many zero bytes.
 %   * end_stream(End)
 %     If =true=, this frame indicates the end of the stream
+%
+%  @bug Technically, I think having a padding of zero is allowed, but
+%        currently that isn't representable
 data_frame(StreamIdent, Data, Options) -->
     { make_data_opts(Options, Opts),
 
@@ -137,6 +140,7 @@ data_frame(StreamIdent, Data, Options) -->
 %     If true, this frame indicates the end of the headers
 %
 %  @see hpack:hpack//2
+%  @bug Technically, I think having a padding of zero is allowed, but currently that isn't representable
 %  @tbd Support for stream-priority flag
 %  @tbd Headers need to fit in a particular size, or needs to use
 %        CONTINUATION frames.
@@ -229,13 +233,14 @@ settings_ack_frame -->
 %! push_promise_frame(?StreamIdent:integer, ?NewStreamID:integer, ?HeaderInfo, ?Options:list)//
 %
 %  Options:
-%
 %  * padded(PadLength)
 %    If non-zero, the stream will be padded with =PadLength= zero bytes
 %  * end_stream(End)
 %    If true, this frame indicates the end of the stream
 %
-%  @arg HeaderInfo Information to be passed to hpack:hpack//2  =| HeaderInfo = HeaderTableSize-TableIn-TableOut-HeaderList |=
+%  @arg HeaderInfo Information to be passed to hpack:hpack//2, in the form =|TableSizeInOut-HeadersList|=
+%  @see hpack:hpack//2
+%  @bug Technically, I think having a padding of zero is allowed, but currently that isn't representable
 push_promise_frame(StreamIdent, NewStreamIdent, HeaderTableInfo-Headers, Options) -->
     { make_push_promise_opts(Options, Opts),
       push_promise_opts_padded(Opts, PadLen),
