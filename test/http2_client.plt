@@ -7,18 +7,21 @@
 test('Pack data frame without padding or stream end') :-
     phrase(http2_client:data_frame(12345, `Hello world`, []),
            Cs),
+    ground(Cs),
     Cs = [0,0,11,0,0,0,0,48,57,72,101,108,108,111,32,119,111,114,108,100].
 
 test('Pack data frame without padding') :-
     phrase(http2_client:data_frame(12345, `Hello world`,
                                    [padded(0), end_stream(true)]),
            Cs),
+    ground(Cs),
     Cs = [0,0,11,0,1,0,0,48,57,72,101,108,108,111,32,119,111,114,108,100].
 
 test('Pack data fram with padding') :-
     phrase(http2_client:data_frame(12345, `Hello world`,
                                    [padded(5), end_stream(true)]),
            Cs),
+    ground(Cs),
     Cs = [0,0,17,0,9,0,0,48,57,5,72,101,108,108,111,32,119,111,114,108,100,0,0,0,0,0].
 
 test('Unpack data without padding') :-
@@ -32,10 +35,12 @@ test('Unpack data without padding') :-
     End = true.
 
 test('Unpack data with padding') :-
-    Cs = [0,0,29,0,8,0,0,212,49,16,72,111,119,32,97,114,101,32,121,111,117,63,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+    Cs = [0,0,29,0,8,0,0,212,49,16,72,111,119,32,97,114,101,32,121,111,117,63,0,
+          0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
     phrase(http2_client:data_frame(Stream, Data,
                                    [padded(Padding), end_stream(End)]),
            Cs),
+    ground(Data), ground(Stream), ground(Padding), ground(End),
     Stream = 54321,
     Data = `How are you?`,
     Padding = 16,
@@ -46,6 +51,7 @@ test('Pack headers') :-
                indexed(':scheme'-'http'),
                indexed(':path'-'/')],
     phrase(http2_client:header_frame(12345, Headers, 4096-[]-_Table, []), Bytes),
+    ground(Bytes),
     Bytes = [0,0,3,1,4,0,0,48,57,130,134,132].
 
 test('Pack headers padding') :-
@@ -53,12 +59,21 @@ test('Pack headers padding') :-
                indexed(':scheme'-'http'),
                indexed(':path'-'/')],
     phrase(http2_client:header_frame(12345, Headers, 4096-[]-_Table, [padded(7)]), Bytes),
+    ground(Bytes),
     Bytes = [0,0,11,1,12,0,0,48,57,7,130,134,132,0,0,0,0,0,0,0].
 
 test('Unpack headers') :-
     Bytes = [0,0,3,1,4,0,0,48,57,130,134,132],
-    phrase(http2_client:header_frame(12345, Headers, 4096-[]-_Table, [end_headers(End)]), Bytes),
-    End = true,
+    phrase(http2_client:header_frame(Stream, Headers, 4096-[]-_Table,
+                                     [end_headers(End),
+                                      end_stream(EndS),
+                                      padded(Padding),
+                                      priority(Prior)]),
+           Bytes),
+    ground(Headers), ground(Stream), ground(End), ground(EndS), ground(Padding),
+    ground(Prior),
+    Stream = 12345,
+    End = true, EndS = false, Padding = 0, Prior = false,
     Headers = [indexed(':method'-'GET'),
                indexed(':scheme'-'http'),
                indexed(':path'-'/')].
@@ -77,6 +92,7 @@ test('Unpack headers padding') :-
 test('Pack settings frame') :-
     phrase(http2_client:settings_frame([header_table_size-10, max_frame_size-0x2345]),
            Bytes),
+    ground(Bytes),
     Bytes = [0, 0, 12,   % length = 6 * nsettings = 12
              4,          % type = 4
              0,          % flags = 0
@@ -101,6 +117,7 @@ test('Unpack settings with unknown settings') :-
 
 test('Settings ack') :-
     phrase(http2_client:settings_ack_frame, Bytes),
+    ground(Bytes),
     Bytes = [0, 0, 0, 4, 1, 0, 0, 0, 0].
 
 test('Pack push promise frame') :-
@@ -110,6 +127,7 @@ test('Pack push promise frame') :-
                indexed(':path'-'/')],
     phrase(http2_client:push_promise_frame(0, 1234, HeaderInfo-Headers, []),
            Bytes),
+    ground(Bytes),
     Bytes = [0,0,7,5,4,0,0,0,0,0,0,4,210,130,135,132].
 
 test('Unpack push promise frame') :-
@@ -144,6 +162,7 @@ test('Unpack push promise frame with opts') :-
 
 test('Pack ping frame') :-
     phrase(http2_client:ping_frame([1,2,3,4,5,6,7,8], false), Bytes),
+    ground(Bytes),
     Bytes = [0,0,8,6,0,0,0,0,0,1,2,3,4,5,6,7,8].
 
 test('Unpack ping frame') :-
@@ -155,6 +174,7 @@ test('Unpack ping frame') :-
 test('Pack goaway frame') :-
     phrase(http2_client:goaway_frame(1234, 9876, `Some debug info`),
            Bytes),
+    ground(Bytes),
     Bytes = [0,0,23,7,0,0,0,0,0,0,0,4,210,0,0,38,148,83,111,109,101,32,100,101,
              98,117,103,32,105,110,102,111].
 
@@ -165,6 +185,15 @@ test('Unpack goaway frame') :-
            Bytes),
     LastId = 1234,
     ErrCode = 9876,
-    DebugData = `Some debug info`.
+    DebugData = `Some debug info`, true.
+
+test('Pack continuation frame') :-
+    Headers = 4096-[]-_Tbl-[indexed(':method'-'GET'),
+                            indexed(':path'-'/'),
+                            literal_inc('something'-'foobar')],
+    phrase(http2_client:continuation_frame(1234, Headers, false), Bytes),
+    ground(Bytes),
+    Bytes = [0,0,20,9,0,0,0,4,210,130,132,64,9,115,111,109,101,116,104,105,110,
+             103,6,102,111,111,98,97,114].
 
 :- end_tests(http2_client).

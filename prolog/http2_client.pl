@@ -95,7 +95,8 @@ data_frame(StreamIdent, Data, Options) -->
       % need to check this after, so on backtracking we can flip this
       % boolean instead of trying all possible lengths
       data_opts_end_stream(Opts, StreamEnd),
-      if_(StreamEnd = true, EndFlag #= 0x1, EndFlag #= 0x0),
+      if_(StreamEnd = true, EndFlag #= 0x1,
+          (StreamEnd = false, EndFlag #= 0x0)),
 
       Flags #= EndFlag \/ PadFlag },
     int24(Length), [0x0, Flags], int31(StreamIdent),
@@ -154,9 +155,12 @@ header_frame(StreamIdent, Headers, Size-Table0-Table1, Options) -->
            replicate(PadLen, 0, PadBytes),
            Length #= PadLen + DataLength + 1)),
 
-      if_(EndStream = true, EndStreamFlag #= 0x1, EndStreamFlag #= 0),
-      if_(EndHeaders = true, EndHeadersFlag #= 0x4, EndHeadersFlag #= 0),
-      if_(IsPriority = true, IsPriorityFlag #= 0x20, IsPriorityFlag #= 0),
+      if_(EndStream = true, EndStreamFlag #= 0x1,
+          (EndStream = false, EndStreamFlag #= 0)),
+      if_(EndHeaders = true, EndHeadersFlag #= 0x4,
+          (EndHeaders = false, EndHeadersFlag #= 0)),
+      if_(IsPriority = true, IsPriorityFlag #= 0x20,
+          (IsPriority = false, IsPriorityFlag #= 0)),
 
       Flags #= EndStreamFlag \/ EndHeadersFlag \/ IsPriorityFlag \/ PadFlag },
     int24(Length), [0x1, Flags],
@@ -166,7 +170,8 @@ header_frame(StreamIdent, Headers, Size-Table0-Table1, Options) -->
 %! priority_frame(?StreamIdent:integer, ?Exclusive:boolean, ?StreamDep:integer, ?Weight:integer)//
 priority_frame(StreamIdent, Exclusive, StreamDep, Weight) -->
     { Weight in 0..255,
-      if_(Exclusive = true, ExclusiveFlag #= 0x8000_0000, ExclusiveFlag #= 0),
+      if_(Exclusive = true, ExclusiveFlag #= 0x8000_0000,
+          (Exclusive = false, ExclusiveFlag #= 0)),
       StreamDep #< 2^31,
       E_StreamDep #= ExclusiveFlag \/ StreamDep },
     int24(5), [0x02, 0],
@@ -235,7 +240,8 @@ push_promise_frame(StreamIdent, NewStreamIdent, HeaderTableInfo-Headers, Options
            PadLenBytes = [PadLen],
            replicate(PadLen, 0, PadBytes))),
 
-      if_(EndHeaders = true, EndFlag #= 0x4, EndFlag #= 0x0),
+      if_(EndHeaders = true, EndFlag #= 0x4,
+          (EndHeaders = false, EndFlag #= 0x0)),
 
       Flags #= EndFlag \/ PadFlag },
     int24(Length),
@@ -245,7 +251,8 @@ push_promise_frame(StreamIdent, NewStreamIdent, HeaderTableInfo-Headers, Options
 
 %! ping_frame(?Data:list, ?Ack:boolean)//
 ping_frame(Data, Ack) -->
-    { if_(Ack = true, Flags #= 0x1, Flags #= 0x0),
+    { if_(Ack = true, Flags #= 0x1,
+          (Ack = false, Flags #= 0x0)),
       length(Data, 8) },
     frame(0x6, Flags, 0x0, Data), !.
 
@@ -267,7 +274,8 @@ continuation_frame(StreamIdent, HeaderTableInfo-Headers, End) -->
     { when(nonvar(Headers);ground(Data),
            phrase(hpack(HeaderTableInfo, Headers), Data)),
       delay(length(Data, Length)),
-      if_(End = true, Flags #= 0x4, Flags #= 0x0) },
+      if_(End = true, Flags #= 0x4,
+          (End = false, Flags #= 0x0)) },
     int24(Length), [0x9, Flags], int31(StreamIdent),
     Data.
 
