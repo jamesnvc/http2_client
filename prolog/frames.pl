@@ -77,14 +77,14 @@ frame(Type, Flags, Ident, Payload) -->
 :- record data_opts(padded=0, end_stream=false).
 :- predicate_options(data_frame//3, 3, [padded(integer),
                                         end_stream(boolean)]).
-%! data_frame(?StreamIdent:integer, ?Data:list, ?Opts)//
+%! data_frame(?StreamIdent:integer, ?Data:list, ?Options)//
 %  DCG for an HTTP/2 data frame
 %
-%  Options:
-%   * padded(PadLength)
-%     If non-zero, the stream will be padded with that many zero bytes.
-%   * end_stream(End)
-%     If =true=, this frame indicates the end of the stream
+%  @arg Options Options list:
+%        * padded(PadLength)
+%          If non-zero, the stream will be padded with that many zero bytes.
+%        * end_stream(End)
+%          If =true=, this frame indicates the end of the stream
 %
 %  @bug Technically, I think having a padding of zero is allowed, but
 %        currently that isn't representable
@@ -125,22 +125,21 @@ data_frame(StreamIdent, Data, Options) -->
                       padded(integer),
                       priority(boolean)]).
 
-%! header_frame(?StreamIdent:integer, ?Headers:list, ?TableSizeInOut, ?Opts)//
+%! header_frame(?StreamIdent:integer, ?Headers:list, ?TableSizeInOut, ?Options)//
 %  DCG for an HTTP/2 header frame.
-%  =|TableSizeInOut|= is the header table configuration
-%  information that is passed to the hpack:hpack//2 DCG.
 %
-%  Options:
-%
-%   * padded(PadLength)
-%     If non-zero, the stream will be padded with that many zero bytes.
-%   * end_stream(EndStream)
-%     If true, this frame indicates the end of the stream
-%   * end_headers(End)
-%     If true, this frame indicates the end of the headers
-%
+%  @arg TableSizeInOut Header table configuration information that is
+%        passed to the hpack:hpack//2 DCG.
+%  @arg Options Allowed options:
+%        * padded(PadLength)
+%          If non-zero, the stream will be padded with that many zero bytes.
+%        * end_stream(EndStream)
+%          If true, this frame indicates the end of the stream
+%        * end_headers(End)
+%          If true, this frame indicates the end of the headers
 %  @see hpack:hpack//2
-%  @bug Technically, I think having a padding of zero is allowed, but currently that isn't representable
+%  @bug Technically, I think having a padding of zero is allowed, but
+%        currently that isn't representable
 %  @tbd Support for stream-priority flag
 %  @tbd Headers need to fit in a particular size, or needs to use
 %        CONTINUATION frames.
@@ -231,16 +230,19 @@ settings_ack_frame -->
                       padded(integer)]).
 
 %! push_promise_frame(?StreamIdent:integer, ?NewStreamID:integer, ?HeaderInfo, ?Options:list)//
+%  DCG for a push-promise frame, which is a frame notifying the
+%  receiver about a new stream the sender intends to initiate.
 %
-%  Options:
-%  * padded(PadLength)
-%    If non-zero, the stream will be padded with =PadLength= zero bytes
-%  * end_stream(End)
-%    If true, this frame indicates the end of the stream
-%
-%  @arg HeaderInfo Information to be passed to hpack:hpack//2, in the form =|TableSizeInOut-HeadersList|=
+%  @arg HeaderInfo Information to be passed to hpack:hpack//2, in the
+%        form =|TableSizeInOut-HeadersList|=
+%  @arg Options Options list:
+%        * padded(PadLength)
+%           If non-zero, the data will be padded by the indicated number of zero bytes
+%        * end_headers(End)
+%           If true, this frame is the end of the stream
 %  @see hpack:hpack//2
-%  @bug Technically, I think having a padding of zero is allowed, but currently that isn't representable
+%  @bug Technically, I think having a padding of zero is allowed, but
+%        currently that isn't representable
 push_promise_frame(StreamIdent, NewStreamIdent, HeaderTableInfo-Headers, Options) -->
     { make_push_promise_opts(Options, Opts),
       push_promise_opts_padded(Opts, PadLen),
