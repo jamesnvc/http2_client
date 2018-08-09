@@ -30,6 +30,7 @@ http2_open(URL, Stream, Options) :-
     debug(http2_client(open), "URL ~w -> Host ~w:~w", [URL, Host, Port]),
     ssl_context(client, Ctx, [host(Host),
                               close_parent(true),
+                              % TODO: use actual ssl certs
                               cert_verify_hook(cert_accept_any)
                               |Options]),
     ssl_set_alpns_protos(Ctx, [h2]),
