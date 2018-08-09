@@ -49,12 +49,26 @@ http2_open(URL, Stream, Options) :-
     % ...then SETTINGS frame
     phrase(settings_frame([]), SettingsCodes),
     put_codes(Stream, SettingsCodes),
-    % ...then we ready a SETTINGS from from server & ACK it
+
+    phrase(header_frame(3, [indexed(':method'-'GET'),
+                            indexed(':path'-'/'),
+                            indexed(':scheme'-'https'),
+                            literal_inc(':authority'-Host)],
+                        4096-[]-HTable, [end_stream(true),
+                                         end_headers(true)]),
+           HeaderCodes),
+    put_codes(Stream, HeaderCodes),
+
+    % ...then we read a SETTINGS from from server & ACK it
     tcp_select([Stream], _, 50),
-    phrase_from_stream(settings_frame(Settings), Stream),
-    debug(http2_client(open), "Server settings ~w", [Settings]),
-    phrase(settings_ack_frame, AckCodes),
-    put_codes(Stream, AckCodes).
+    debug(http2_client(open), "Data ready", []),
+    phrase_from_stream(frames:frame(Type, Flags, Ident, Payload), Stream),
+    debug(http2_client(open), "Frame ~w ~w ~w ~w", [Type, Flags, Ident, Payload]).
+    %% debug(http2_client(open), "Server settings ~w", [Settings]),
+    %% phrase(settings_ack_frame, AckCodes),
+    %% put_codes(Stream, AckCodes),
+
+    %% copy_stream_data(Stream, user_output).
 
 %! http2_close(+Stream) is det.
 %  Close the given stream.
