@@ -132,12 +132,10 @@ header(_-DT0-DT0, literal_never(H)) --> literal_header_never_idx(DT0, H).
 %        =TableSize= is the maximum size of the dynamic table, =InTable= is
 %        the dynamic table before recognizing =Headers= and =OutTable= is
 %        the dynamic table after.
-%
 %  @arg Headers the list of HTTP headers.
 %        Headers are in the format =|Type(Name-Value)|=, where =Type= is
 %        one of =indexed=, =literal_inc=, =literal_without=, and
 %        =literal_never=, depending on how the header is to be indexed.
-%
 %  @see https://httpwg.org/specs/rfc7541.html
 %  @tbd Make headers more ergonomic -- maybe not wrapped in a functor
 %        indicating the mode, but not sure how else to allow control of
