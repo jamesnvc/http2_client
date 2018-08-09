@@ -35,7 +35,7 @@ http2_open(URL, Stream, Options) :-
     ssl_set_alpns_protos(Ctx, [h2]),
     tcp_host_to_address(Host, Address),
     debug(http2_client(open), "Host ~w -> Address ~w", [Host, Address]),
-    tcp_connect('127.0.0.1':9988, PlainStreamPair, []),
+    tcp_connect(Address:Port, PlainStreamPair, []),
     debug(http2_client(open), "Connected", []),
     stream_pair(PlainStreamPair, PlainRead, PlainWrite),
     ssl_negotiate(Ctx, PlainRead, PlainWrite,
