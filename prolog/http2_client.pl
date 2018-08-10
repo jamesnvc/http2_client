@@ -8,6 +8,7 @@
 :- use_module(library(predicate_options)).
 :- use_module(library(ssl), [ssl_context/3,
                              ssl_negotiate/5,
+                             ssl_set_alpn_protos/3,
                              cert_accept_any/5]).
 :- use_module(library(socket), [tcp_connect/3,
                                 tcp_select/3,
@@ -15,7 +16,7 @@
 :- use_module(frames).
 :- use_module(library(url), [parse_url/2]).
 
-:- use_foreign_library(ssl_alpns, [ssl_set_alpns_protos/2]).
+%% :- use_foreign_library(ssl_alpns).
 
 connection_preface(`PRI * HTTP/2.0\r\n\r\nSM\r\n\r\n`).
 
@@ -28,12 +29,12 @@ http2_open(URL, Stream, Options) :-
     parse_url(URL, [protocol(https),host(Host)|Attrs]),
     (memberchk(port(Port), Attrs) ; Port = 443), !,
     debug(http2_client(open), "URL ~w -> Host ~w:~w", [URL, Host, Port]),
-    ssl_context(client, Ctx, [host(Host),
-                              close_parent(true),
-                              % TODO: use actual ssl certs
-                              cert_verify_hook(cert_accept_any)
-                              |Options]),
-    ssl_set_alpns_protos(Ctx, [h2]),
+    ssl_context(client, Ctx0, [host(Host),
+                               close_parent(true),
+                               % TODO: use actual ssl certs
+                               cert_verify_hook(cert_accept_any)
+                               |Options]),
+    ssl_set_alpn_protos(Ctx0, Ctx, [h2]),
     tcp_host_to_address(Host, Address),
     debug(http2_client(open), "Host ~w -> Address ~w", [Host, Address]),
     tcp_connect(Address:Port, PlainStreamPair, []),
