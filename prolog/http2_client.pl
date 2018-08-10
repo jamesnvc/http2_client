@@ -48,17 +48,17 @@ http2_open(URL, Stream, Options) :-
     connection_preface(ConnectionPreface),
     put_codes(Stream, ConnectionPreface),
     % ...then SETTINGS frame
-    phrase(settings_frame([]), SettingsCodes),
-    put_codes(Stream, SettingsCodes),
+    send_frame(Stream, settings_frame([])),
 
-    phrase(header_frame(3, [indexed(':method'-'GET'),
-                            indexed(':path'-'/'),
-                            indexed(':scheme'-'https'),
-                            literal_inc(':authority'-Host)],
-                        4096-[]-HTable, [end_stream(true),
-                                         end_headers(true)]),
-           HeaderCodes),
-    put_codes(Stream, HeaderCodes),
+    send_frame(Stream,
+               header_frame(5, [indexed(':method'-'GET'),
+                                indexed(':scheme'-'https'),
+                                literal_inc(':authority'-Host),
+                                indexed(':path'-'/'),
+                                literal_inc('user-agent'-'swi-prolog')],
+                            4096-[]-HTable, [end_stream(true),
+                                             end_headers(true)])),
+    flush_output(Stream),
 
     % ...then we read a SETTINGS from from server & ACK it
     tcp_select([Stream], _, 50),
@@ -80,6 +80,12 @@ http2_close(_Stream).
 %  connection =Stream=.
 %  @see http2_open/2
 http2_request(_Stream, _Method, _Headers, _Body, _Response).
+
+:- meta_predicate send_frame(+, :).
+send_frame(Stream, Frame) :-
+    phrase(Frame, FrameCodes),
+    debug(http2_client(open), "Sending data ~w", [FrameCodes]),
+    put_codes(Stream, FrameCodes).
 
 put_codes(Stream, Codes) :-
     open_codes_stream(Codes, CodesStream),
