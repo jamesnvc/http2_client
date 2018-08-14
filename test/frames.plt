@@ -62,6 +62,27 @@ test('Pack headers padding') :-
     ground(Bytes),
     Bytes = [0,0,11,1,12,0,0,48,57,7,130,134,132,0,0,0,0,0,0,0].
 
+test('Pack headers priority') :-
+    Headers = [indexed(':method'-'GET'),
+               indexed(':scheme'-'http'),
+               indexed(':path'-'/')],
+    phrase(header_frame(12345, Headers, 4096-[]-_Table,
+                        [padded(7),
+                         priority(true),
+                         is_exclusive(false),
+                         stream_dependency(0x50),
+                         weight(69)]),
+           Bytes),
+    ground(Bytes),
+    Bytes = [0,0,16,
+             1,
+             44,
+             0,0,48,57,
+             7,
+             0, 0, 0, 0x50,
+             69,
+             130,134,132,0,0,0,0,0,0,0].
+
 test('Unpack headers') :-
     Bytes = [0,0,3,1,4,0,0,48,57,130,134,132],
     phrase(header_frame(Stream, Headers, 4096-[]-_Table,
@@ -85,6 +106,32 @@ test('Unpack headers padding') :-
                indexed(':scheme'-'http'),
                indexed(':path'-'/')],
     Pad = 7.
+
+test('Unpack headers priority') :-
+    Bytes = [0,0,16,
+             1,
+             44,
+             0,0,48,57,
+             7,
+             0, 0, 0, 0x50,
+             69,
+             130,134,132,0,0,0,0,0,0,0],
+    phrase(header_frame(Ident, Headers, 4096-[]-_Table,
+                        [padded(Pad),
+                         priority(Priority),
+                         is_exclusive(Exclusive),
+                         stream_dependency(StreamDep),
+                         weight(Weight)]),
+           Bytes),
+    Ident = 12345,
+    Headers = [indexed(':method'-'GET'),
+               indexed(':scheme'-'http'),
+               indexed(':path'-'/')],
+    Pad = 7,
+    Priority = true,
+    Exclusive = false,
+    StreamDep = 0x50,
+    Weight = 69.
 
 % TODO: tests for priority frame
 % TODO: tests for rst frame

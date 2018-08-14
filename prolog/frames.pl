@@ -22,32 +22,6 @@
 :- use_module(hpack, [hpack//2]).
 :- use_module(reif).
 
-int16(I) -->
-    { [A, B] ins 0..255,
-      I #= A * (2^8) + B },
-    [A, B].
-
-int24(I) -->
-    { [A, B, C] ins 0..255,
-      I #= A * (2^16) + B * (2^8) + C },
-    [A, B, C].
-
-int31(I) -->
-    { [A, B, C, D] ins 0..255,
-      A_ in 0..127,
-      A_ #= A mod 128,
-      I in 0..0x7fff_ffff,
-      I #= A_ * (2^24) + B * (2^16) + C * (2^8) + D,
-      % Annoying thing with StreamIdent: we want to ignore the high
-      % bit when receiving, but set it to zero when sending
-      (ground(I) -> A #= A_ ; true) },
-    [A, B, C, D].
-
-int32(I) -->
-    { [A, B, C, D] ins 0..255,
-      I #= A * (2^24) + B * (2^16) + C * (2^8) + D },
-    [A, B, C, D].
-
 /*
  +-----------------------------------------------+
  |                 Length (24)                   |
@@ -118,12 +92,18 @@ data_frame(StreamIdent, Data, Options) -->
 :- record header_opts(end_stream=false,
                       end_headers=true,
                       padded=0,
-                      priority=false).
+                      priority=false,
+                      is_exclusive=false,
+                      stream_dependency=0,
+                      weight=0).
 :- predicate_options(header_frame//3, 3,
                      [end_stream(boolean),
                       end_headers(boolean),
                       padded(integer),
-                      priority(boolean)]).
+                      priority(boolean),
+                      is_exclusive(boolean),
+                      stream_dependency(integer),
+                      weight(integer)]).
 
 %! header_frame(?StreamIdent:integer, ?Headers:list, ?TableSizeInOut, ?Options)//
 %  DCG for an HTTP/2 header frame.
@@ -137,6 +117,8 @@ data_frame(StreamIdent, Data, Options) -->
 %          If true, this frame indicates the end of the stream
 %        * end_headers(End)
 %          If true, this frame indicates the end of the headers
+%        * priority(Priority)
+%          If true, this frame has priority set.
 %  @see hpack:hpack//2
 %  @bug Technically, I think having a padding of zero is allowed, but
 %        currently that isn't representable
@@ -147,9 +129,11 @@ header_frame(StreamIdent, Headers, Size-Table0-Table1, Options) -->
     { make_header_opts(Options, Opts),
       header_opts_padded(Opts, PadLen),
       header_opts_end_stream(Opts, EndStream),
-      % XXX: Not supporting steam priority for now
-      header_opts_priority(Opts, IsPriority), IsPriority = false,
+      header_opts_priority(Opts, IsPriority),
       header_opts_end_headers(Opts, EndHeaders),
+      header_opts_is_exclusive(Opts, IsExclusive),
+      header_opts_stream_dependency(Opts, StreamDep),
+      header_opts_weight(Opts, Weight),
 
       % dumb that we have to call phrase/2 inside a DCG, but we need
       % to know the length of the output & I'm not sure how else to do
@@ -157,28 +141,44 @@ header_frame(StreamIdent, Headers, Size-Table0-Table1, Options) -->
       when(nonvar(Headers);ground(Data),
            phrase(hpack(Size-Table0-Table1, Headers), Data)),
 
+      DataLength #>= 0,
       delay(length(Data, DataLength)),
       zcompare(Comp, PadLen, 0),
       if_(Comp = (=),
           (PadFlag = 0x0,
-           Length #= DataLength,
+           Length_ #= DataLength,
            PadLenBytes = [], PadBytes = []),
           (PadFlag = 0x8,
            PadLenBytes = [PadLen],
            replicate(PadLen, 0, PadBytes),
-           Length #= PadLen + DataLength + 1)),
+           Length_ #= PadLen + DataLength + 1)),
 
       if_(EndStream = true, EndStreamFlag #= 0x1,
           (EndStream = false, EndStreamFlag #= 0)),
       if_(EndHeaders = true, EndHeadersFlag #= 0x4,
           (EndHeaders = false, EndHeadersFlag #= 0)),
-      if_(IsPriority = true, IsPriorityFlag #= 0x20,
-          (IsPriority = false, IsPriorityFlag #= 0)),
+      if_(IsPriority = true,
+          (IsPriorityFlag #= 0x20,
+           StreamDep #> 0,
+           if_(IsExclusive = true,
+               (EStreamDep #=  StreamDep + 2^31,
+                StreamDep #= EStreamDep mod 2^31),
+               (IsExclusive = false,
+                StreamDep #= EStreamDep)),
+           EStreamDepBytes = int32(EStreamDep),
+           Length #= Length_ + 5,
+           WeightBytes = [Weight]),
+          (IsPriority = false,
+           IsPriorityFlag #= 0x0,
+           Length #= Length_,
+           EStreamDepBytes = [], WeightBytes = [])),
 
       Flags #= EndStreamFlag \/ EndHeadersFlag \/ IsPriorityFlag \/ PadFlag },
     int24(Length), [0x1, Flags],
     int31(StreamIdent),
-    PadLenBytes, Data, PadBytes, !.
+    PadLenBytes,
+    EStreamDepBytes, WeightBytes,
+    Data, PadBytes, !.
 
 %! priority_frame(?StreamIdent:integer, ?Exclusive:boolean, ?StreamDep:integer, ?Weight:integer)//
 priority_frame(StreamIdent, Exclusive, StreamDep, Weight) -->
@@ -307,3 +307,31 @@ continuation_frame(StreamIdent, HeaderTableInfo-Headers, End) -->
           (End = false, Flags #= 0x0)) },
     int24(Length), [0x9, Flags], int31(StreamIdent),
     Data.
+
+% Helper predicates
+
+int16(I) -->
+    { [A, B] ins 0..255,
+      I #= A * (2^8) + B },
+    [A, B].
+
+int24(I) -->
+    { [A, B, C] ins 0..255,
+      I #= A * (2^16) + B * (2^8) + C },
+    [A, B, C].
+
+int31(I) -->
+    { [A, B, C, D] ins 0..255,
+      A_ in 0..127,
+      A_ #= A mod 128,
+      I in 0..0x7fff_ffff,
+      I #= A_ * (2^24) + B * (2^16) + C * (2^8) + D,
+      % Annoying thing with StreamIdent: we want to ignore the high
+      % bit when receiving, but set it to zero when sending
+      (ground(I) -> A #= A_ ; true) },
+    [A, B, C, D].
+
+int32(I) -->
+    { [A, B, C, D] ins 0..255,
+      I #= A * (2^24) + B * (2^16) + C * (2^8) + D },
+    [A, B, C, D].
