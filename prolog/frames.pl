@@ -63,6 +63,7 @@ frame(Type, Flags, Ident, Payload) -->
 %  @bug Technically, I think having a padding of zero is allowed, but
 %        currently that isn't representable
 data_frame(StreamIdent, Data, Options) -->
+    int24(Length), [0x0],
     { make_data_opts(Options, Opts),
 
       StreamIdent #> 0,
@@ -86,7 +87,7 @@ data_frame(StreamIdent, Data, Options) -->
           (StreamEnd = false, EndFlag #= 0x0)),
 
       Flags #= EndFlag \/ PadFlag },
-    int24(Length), [0x0, Flags], int31(StreamIdent),
+    [Flags], int31(StreamIdent),
     PadLenBytes, Data, PadBytes, !.
 
 :- record header_opts(end_stream=false,
@@ -126,6 +127,7 @@ data_frame(StreamIdent, Data, Options) -->
 %  @tbd Headers need to fit in a particular size, or needs to use
 %        CONTINUATION frames.
 header_frame(StreamIdent, Headers, Size-Table0-Table1, Options) -->
+    int24(Length), [0x1],
     { make_header_opts(Options, Opts),
       header_opts_padded(Opts, PadLen),
       header_opts_end_stream(Opts, EndStream),
@@ -174,7 +176,7 @@ header_frame(StreamIdent, Headers, Size-Table0-Table1, Options) -->
            EStreamDepBytes = [], WeightBytes = [])),
 
       Flags #= EndStreamFlag \/ EndHeadersFlag \/ IsPriorityFlag \/ PadFlag },
-    int24(Length), [0x1, Flags],
+    [Flags],
     int31(StreamIdent),
     PadLenBytes,
     EStreamDepBytes, WeightBytes,
@@ -182,12 +184,12 @@ header_frame(StreamIdent, Headers, Size-Table0-Table1, Options) -->
 
 %! priority_frame(?StreamIdent:integer, ?Exclusive:boolean, ?StreamDep:integer, ?Weight:integer)//
 priority_frame(StreamIdent, Exclusive, StreamDep, Weight) -->
+    int24(5), [0x02, 0],
     { Weight in 0..255,
       if_(Exclusive = true, ExclusiveFlag #= 0x8000_0000,
           (Exclusive = false, ExclusiveFlag #= 0)),
       StreamDep #< 2^31,
       E_StreamDep #= ExclusiveFlag \/ StreamDep },
-    int24(5), [0x02, 0],
     int31(StreamIdent),
     int32(E_StreamDep), [Weight].
 
@@ -197,10 +199,10 @@ rst_frame(StreamIdent, ErrCode) -->
 
 %! settings_frame(?Settings:list)//
 settings_frame(Settings) -->
-    { delay(length(Settings, SettingsLength)),
-      Length #= SettingsLength * 6 },
     int24(Length),
     [0x4, 0x0], int32(0),
+    { delay(length(Settings, SettingsLength)),
+      Length #= SettingsLength * 6 },
     settings_params(Settings).
 
 settings_params([K-V|Settings]) -->
@@ -244,11 +246,13 @@ settings_ack_frame -->
 %  @bug Technically, I think having a padding of zero is allowed, but
 %        currently that isn't representable
 push_promise_frame(StreamIdent, NewStreamIdent, HeaderTableInfo-Headers, Options) -->
+    int24(Length), [0x5],
     { make_push_promise_opts(Options, Opts),
       push_promise_opts_padded(Opts, PadLen),
       push_promise_opts_end_headers(Opts, EndHeaders),
 
       R_NewStreamIdent #= NewStreamIdent mod 2^32,
+      NewStreamIdent #= R_NewStreamIdent mod 2^32,
 
       % As noted in header_frame//4, it would be nice if we could do
       % this in a better way...
@@ -270,8 +274,7 @@ push_promise_frame(StreamIdent, NewStreamIdent, HeaderTableInfo-Headers, Options
           (EndHeaders = false, EndFlag #= 0x0)),
 
       Flags #= EndFlag \/ PadFlag },
-    int24(Length),
-    [0x5, Flags],
+    [Flags],
     int31(StreamIdent),
     PadLenBytes, int32(R_NewStreamIdent), Data, PadBytes, !.
 
@@ -284,9 +287,9 @@ ping_frame(Data, Ack) -->
 
 %! goaway_frame(?LastStreamId, ?ErrorCode, ?Data)//
 goaway_frame(LastStreamId, Error, Data) -->
+    int24(Length), [0x7, 0], int32(0),
     { delay(length(Data, DataLength)),
       Length #= DataLength + 4 + 4 },
-    int24(Length), [0x7, 0], int32(0),
     int31(LastStreamId), int32(Error),
     Data.
 
@@ -300,12 +303,13 @@ window_update_frame(StreamIdent, Increment) -->
 %  @arg HeaderInfo Information to be passed to hpack:hpack//2
 %        =| HeaderInfo = HeaderTableSize-TableIn-TableOut-HeaderList |=
 continuation_frame(StreamIdent, HeaderTableInfo-Headers, End) -->
+    int24(Length), [0x9],
     { when(nonvar(Headers);ground(Data),
            phrase(hpack(HeaderTableInfo, Headers), Data)),
       delay(length(Data, Length)),
       if_(End = true, Flags #= 0x4,
           (End = false, Flags #= 0x0)) },
-    int24(Length), [0x9, Flags], int31(StreamIdent),
+    [Flags], int31(StreamIdent),
     Data.
 
 % Helper predicates

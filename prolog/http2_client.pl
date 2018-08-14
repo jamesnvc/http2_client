@@ -8,7 +8,6 @@
 :- use_module(library(predicate_options)).
 :- use_module(library(ssl), [ssl_context/3,
                              ssl_negotiate/5,
-                             ssl_set_alpn_protos/3,
                              cert_accept_any/5]).
 :- use_module(library(socket), [tcp_connect/3,
                                 tcp_select/3,
@@ -29,12 +28,12 @@ http2_open(URL, Stream, Options) :-
     parse_url(URL, [protocol(https),host(Host)|Attrs]),
     (memberchk(port(Port), Attrs) ; Port = 443), !,
     debug(http2_client(open), "URL ~w -> Host ~w:~w", [URL, Host, Port]),
-    ssl_context(client, Ctx0, [host(Host),
+    ssl_context(client, Ctx, [host(Host),
                                close_parent(true),
+                               alpn_protocols([h2]),
                                % TODO: use actual ssl certs
                                cert_verify_hook(cert_accept_any)
                                |Options]),
-    ssl_set_alpn_protos(Ctx0, Ctx, [h2]),
     tcp_host_to_address(Host, Address),
     debug(http2_client(open), "Host ~w -> Address ~w", [Host, Address]),
     tcp_connect(Address:Port, PlainStreamPair, []),
@@ -63,13 +62,59 @@ http2_open(URL, Stream, Options) :-
     % ...then we read a SETTINGS from from server & ACK it
     tcp_select([Stream], _, 50),
     debug(http2_client(open), "Data ready", []),
-    phrase_from_stream(frames:frame(Type, Flags, Ident, Payload), Stream),
-    debug(http2_client(open), "Frame ~w ~w ~w ~w", [Type, Flags, Ident, Payload]).
+    stream_to_lazy_list(Stream, StreamList),
+    read_frames(Stream, HTable, StreamList).
+
     %% debug(http2_client(open), "Server settings ~w", [Settings]),
     %% phrase(settings_ack_frame, AckCodes),
     %% put_codes(Stream, AckCodes),
 
     %% copy_stream_data(Stream, user_output).
+
+read_frames(Stream, HTable, In) :-
+    debug(http2_client(open), "try Settings frame", []),
+    phrase(settings_frame(Settings), In, Rest), !,
+    debug(http2_client(open), "Got settings ~w", [Settings]),
+    send_frame(Stream, settings_ack_frame),
+    flush_output(Stream),
+    read_frames(Stream, HTable, Rest).
+read_frames(Stream, HTable, In) :-
+    debug(http2_client(open), "try Settings ack frame", []),
+    phrase(settings_ack_frame, In, Rest), !,
+    debug(http2_client(open), "Got settings ack", []),
+    read_frames(Stream, HTable, Rest).
+%% read_frames(Stream, HTable, In) :-
+%%     debug(http2_client(open), "try headers frame with ~w", [HTable]),
+%%     phrase(header_frame(Ident, Headers, 4096-HTable-HTableOut, Opts),
+%%           In, Rest), !,
+%%     debug(http2_client(open), "Headers ~w ~w ~w ~w", [Ident, Headers,
+%%                                                       HTableOut, Opts]),
+%%     memberchk(end_stream(End), Opts),
+%%     (End
+%%     -> close(Stream)
+%%     ; read_frames(Stream, HTableOut, Rest)).
+read_frames(Stream, HTable, In) :-
+    debug(http2_client(open), "try data frame", []),
+    catch(phrase(data_frame(Ident, Data, Opts), In, Rest),
+          _, false), !,
+    debug(http2_client(open), "Data ~w ~s ~w", [Ident, Data, Opts]),
+    memberchk(end_stream(End), Opts),
+    (End -> close(Stream) ; read_frames(Stream, HTable, Rest)).
+read_frames(Stream, HTable, In) :-
+    debug(http2_client(open), "try push promise frame", []),
+    phrase(push_promise_frame(Ident, NewIdent,
+                              4096-HTable-HTableOut-Headers,
+                              Opts),
+           In, Rest), !,
+    debug(http2_client(open), "Got push promise ~w ~w ~w ~w ~w", [Ident, NewIdent, HTableOut, Headers, Opts]),
+    read_frames(Stream, HTableOut, Rest).
+read_frames(Stream, HTable, In) :-
+    debug(http2_client(open), "try other frame", []),
+    phrase(frames:frame(Type, Flags, Ident, Payload),
+           In, Rest), !,
+    debug(http2_client(open), "Other frame ~w ~w ~w ~w",
+          [Type, Flags, Ident, Payload]),
+    read_frames(Stream, HTable, Rest).
 
 %! http2_close(+Stream) is det.
 %  Close the given stream.
