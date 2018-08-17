@@ -17,7 +17,7 @@
 int(Prefix, PrefixL, N) -->
     { PrefixShift #= 2^(8 - PrefixL),
       N #>= 0,
-      N #=< PrefixShift - 1,
+      N #< PrefixShift - 1,
       Header #= (Prefix * PrefixShift) + N,
       Header in 0..0xFF },
     [Header].
