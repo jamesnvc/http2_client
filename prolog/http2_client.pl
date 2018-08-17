@@ -83,22 +83,20 @@ read_frames(Stream, HTable, In) :-
     phrase(settings_ack_frame, In, Rest), !,
     debug(http2_client(open), "Got settings ack", []),
     read_frames(Stream, HTable, Rest).
-%% read_frames(Stream, HTable, In) :-
-%%     debug(http2_client(open), "try headers frame with ~w", [HTable]),
-%%     phrase(header_frame(Ident, Headers, 4096-HTable-HTableOut, Opts),
-%%           In, Rest), !,
-%%     debug(http2_client(open), "Headers ~w ~w ~w ~w", [Ident, Headers,
-%%                                                       HTableOut, Opts]),
-%%     memberchk(end_stream(End), Opts),
-%%     (End
-%%     -> close(Stream)
-%%     ; read_frames(Stream, HTableOut, Rest)).
+read_frames(Stream, HTable, In) :-
+    debug(http2_client(open), "try headers frame with ~w", [HTable]),
+    phrase(header_frame(Ident, Headers, 4096-HTable-HTableOut, [end_stream(End)]),
+          In, Rest), !,
+    debug(http2_client(open), "Headers ~w ~w ~w ~w", [Ident, Headers,
+                                                      HTableOut, End]),
+    (End
+    -> close(Stream)
+    ; read_frames(Stream, HTableOut, Rest)).
 read_frames(Stream, HTable, In) :-
     debug(http2_client(open), "try data frame", []),
-    catch(phrase(data_frame(Ident, Data, Opts), In, Rest),
+    catch(phrase(data_frame(Ident, Data, [end_stream(End)]), In, Rest),
           _, false), !,
-    debug(http2_client(open), "Data ~w ~s ~w", [Ident, Data, Opts]),
-    memberchk(end_stream(End), Opts),
+    debug(http2_client(open), "Data ~w ~s ~w", [Ident, Data, End]),
     (End -> close(Stream) ; read_frames(Stream, HTable, Rest)).
 read_frames(Stream, HTable, In) :-
     debug(http2_client(open), "try push promise frame", []),
@@ -112,7 +110,7 @@ read_frames(Stream, HTable, In) :-
     debug(http2_client(open), "try other frame", []),
     phrase(frames:frame(Type, Flags, Ident, Payload),
            In, Rest), !,
-    debug(http2_client(open), "Other frame ~w ~w ~w ~w",
+    debug(http2_client(open), "Other frame Type ~w flags ~w ident ~w payload ~w",
           [Type, Flags, Ident, Payload]),
     read_frames(Stream, HTable, Rest).
 
