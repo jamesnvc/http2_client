@@ -1,6 +1,6 @@
 :- module(http2_client, [http2_open/3,
                          http2_close/1,
-                         http2_request/5]).
+                         http2_request/6]).
 /** <module> HTTP/2 client
 
 @author James Cash
@@ -23,6 +23,7 @@ connection_preface(`PRI * HTTP/2.0\r\n\r\nSM\r\n\r\n`).
 :- predicate_options(http2_open/3, 3, [pass_to(ssl_context/3)]).
 
 :- record http2_ctx(stream=false,
+                    message_queue=false,
                     worker_thread_id=false).
 
 % TODO: store state of connection, to determine what's valid to recieve/send
@@ -34,6 +35,7 @@ connection_preface(`PRI * HTTP/2.0\r\n\r\nSM\r\n\r\n`).
 
 :- record http2_state(authority=false,
                       stream=false,
+                      message_queue=false,
                       settings=settings{header_table_size: 4096,
                                         enable_push: 1,
                                         max_concurrent_streams: unlimited,
@@ -71,9 +73,13 @@ http2_open(URL, Http2Ctx, Options) :-
     % ...then SETTINGS frame
     send_frame(Stream, settings_frame([])),
     % XXX: ...then we read a SETTINGS from from server & ACK it
-    make_http2_state(State, [authority(Host), stream(Stream)]),
+    message_queue_create(Queue, [alias(http2_msg_queue)]),
+    make_http2_state(State, [authority(Host),
+                             stream(Stream),
+                             message_queue(Queue)]),
     thread_create(listen_socket(State), WorkerThreadId, []),
     make_http2_ctx(Http2Ctx, [stream(Stream),
+                              message_queue(Queue),
                               worker_thread_id(WorkerThreadId)]).
 
 /*
@@ -89,12 +95,21 @@ http2_open(URL, Http2Ctx, Options) :-
 */
 
 
-listen_socket(State) :-
-    http2_state_stream(State, Stream),
-    tcp_select([Stream], _, 50),
-    debug(http2_client(open), "Data ready", []),
-    stream_to_lazy_list(Stream, StreamList),
-    read_frames(State, StreamList).
+listen_socket(State0) :-
+    http2_state_stream(State0, Stream),
+    http2_state_message_queue(State0, Queue),
+    (thread_get_message(Queue, Msg, [timeout(0)])
+    -> (debug(http2_client(open), "Client msg ~w", [Msg]),
+        State1 = State0)
+    ;  State1 = State0),
+    tcp_select([Stream], Inputs, 50),
+    (Inputs = [Stream]
+    -> (debug(http2_client(open), "Data ready", []),
+        stream_to_lazy_list(Stream, StreamList),
+        % XXX: can we just recreate the lazy list? will that work?
+        read_frame(State1, StreamList, State2, _StreamListRest))
+    ;  State2 = State1),
+    listen_socket(State2).
 
     %% debug(http2_client(open), "Server settings ~w", [Settings]),
     %% phrase(settings_ack_frame, AckCodes),
@@ -113,8 +128,8 @@ read_frame(State0, In, State1, Rest) :-
     phrase(frames:frame(Type, Flags, Ident, Payload), Bytes),
     handle_frame(Type, Ident, State0, Bytes, State1, Rest).
 
-handle_frame(0x0, _, State0, In, State1, Rest) :-
-    phrase(data_frame(Ident, Data, [end_stream(End)]), In, Rest),
+handle_frame(0x0, _, State0, In, State1, Rest) :- % data frame
+    phrase(data_frame(Ident, Data, [end_stream(End)]), In, Rest), !,
     debug(http2_client(open), "Data ~w ~s ~w", [Ident, Data, End]),
     stream_info(State0, Ident, StreamInfo0),
     http2_stream_data(StreamInfo0, OldData),
@@ -123,7 +138,7 @@ handle_frame(0x0, _, State0, In, State1, Rest) :-
                             StreamInfo0, StreamInfo1),
     % TODO: if End, notify client
     update_state_substream(Ident, StreamInfo1, State0, State1).
-handle_frame(0x1, Ident, State0, In, State1, Rest) :-
+handle_frame(0x1, Ident, State0, In, State1, Rest) :- % headers frame
     stream_info(State0, Ident, StreamInfo),
     http2_stream_header_table(StreamInfo, HeaderTable0),
     http2_stream_header_table_size(StreamInfo, TableSize),
@@ -133,14 +148,76 @@ handle_frame(0x1, Ident, State0, In, State1, Rest) :-
                          % Ignoring priority
                          [end_stream(EndStream),
                           end_headers(EndHeaders)]),
-          In, Rest),
+          In, Rest), !,
     % XXX: what to do about EndHeaders? Should affect state or
     % something
     http2_stream_headers(StreamInfo, PreviousHeaders),
     append(PreviousHeaders, Headers, NewHeaders),
     % TODO: if End, notify client
+    % TODO: if EndStream is true but EndHeaders isn't, then wait for
+    % more continuation frames
     set_http2_stream_fields([header_table(HeaderTable1),
                              done(EndStream),
+                             headers(NewHeaders)],
+                            StreamInfo, StreamInfo1),
+    update_state_substream(Ident, StreamInfo1, State0, State1).
+handle_frame(0x2, _Ident, State0, _In, State0, _Rest). % priority frame
+handle_frame(0x3, Ident, State0, In, State1, Rest) :- % rst frame
+    phrase(rst_frame(Ident, ErrCode), In, Rest), !,
+    debug(http2_client(open), "Rst frame ~w ~w", [Ident, ErrCode]),
+    stream_info(State0, Ident, StreamInfo0),
+    set_done_of_http2_stream(true, StreamInfo0, StreamInfo1),
+    % TODO: indicate error to client
+    update_state_substream(Ident, StreamInfo1, State0, State1).
+handle_frame(0x4, _, State0, In, State1, Rest) :- % settings frame
+    phrase(settings_frame(UpdateSettings), In, Rest), !,
+    http2_state_settings(State0, Settings),
+    update_settings(Settings, UpdateSettings, NewSettings),
+    set_settings_of_http2_state(NewSettings, State0, State1),
+    % send ACK
+    http2_state_stream(State1, Stream),
+    send_frame(Stream, settings_ack_frame), flush_output(Stream).
+handle_frame(0x4, _, State0, In, State0, Rest) :- % settings ack frame
+    phrase(settings_frame_ack, In, Rest), !.
+handle_frame(0x5, Ident, State0, In, State1, Rest) :- % push promise frame
+    http2_state_settings(State0, Settings),
+    get_dict(header_table_size, Settings, TableSize),
+    phrase(push_promise_frame(Ident, NewIdent, TableSize-[]-TableOut-Headers,
+                              [end_headers(EndHeaders)]),
+          In, Rest), !,
+    stream_info(State0, NewIdent, StreamInfo0),
+    % TODO: as in headers frame, do something with EndHeaders?
+    set_http2_stream_fields([headers(Headers),
+                             header_table(TableOut)],
+                            StreamInfo0, StreamInfo1),
+    update_state_substream(NewIdent, StreamInfo1, State0, State1).
+handle_frame(0x6, _, State, In, State, Rest) :- % ping frame
+    phrase(ping_frame(_, Ack), In, Rest), !,
+    (Ack
+    ; (http2_state_stream(State, Stream),
+       send_frame(Stream, ping_frame(`12345678`, true)))).
+handle_frame(0x7, _, State0, In, State0, Rest) :- % goaway frame
+    phrase(goaway_frame(LastStreamId, Error, Data), In, Rest),
+    debug(http2_client(open), "GOAWAY frame: ~w ~w ~w", [LastStreamId, Error, Data]),
+    % TODO: need to stop stuff now
+    true.
+handle_frame(0x8, _, State0, In, State0, Rest) :- % window frame
+    phrase(window_update_frame(Ident, Increment), In, Rest), !,
+    % TODO: update flow control state for the stream
+    true.
+handle_frame(0x9, Ident, State0, In, State1, Rest) :- % continuation frame
+    stream_info(State0, Ident, StreamInfo),
+    http2_stream_header_table(StreamInfo, HeaderTable0),
+    http2_stream_header_table_size(StreamInfo, TableSize),
+    phrase(continuation_frame(Ident,
+                              TableSize-HeaderTable0-HeaderTable1-Headers,
+                              EndHeaders),
+          In, Rest),
+    http2_stream_headers(StreamInfo, PreviousHeaders),
+    append(PreviousHeaders, Headers, NewHeaders),
+    % Handle EndHeaders? (end of headers = means end of stream if the
+    % previous header frame was end-of-stream but not end-of-headers)
+    set_http2_stream_fields([header_table(HeaderTable1),
                              headers(NewHeaders)],
                             StreamInfo, StreamInfo1),
     update_state_substream(Ident, StreamInfo1, State0, State1).
@@ -153,69 +230,25 @@ stream_info(State, Ident, Stream) :-
        make_http2_stream(Stream, [header_table_size(TableSize)]))).
 
 update_state_substream(Ident, StreamInfo, State0, State1) :-
-    http2_state_substreams(STate0, Streams0),
+    http2_state_substreams(State0, Streams0),
     put_dict(Ident, Streams0, StreamInfo, Streams1),
     set_substreams_of_http2_state(Streams1, State0, State1).
-
-read_frames(State, In) :-
-    phrase(settings_frame(RecievedSettings), In, Rest), !,
-    debug(http2_client(open), "Got settings ~w", [RecievedSettings]),
-    http2_state_settings(State, Settings),
-    update_settings(Settings, RecievedSettings, NewSettings),
-    debug(http2_client(open), "Settings ~w + ~w -> ~w",
-          [Settings, RecievedSettings, NewSettings]),
-    set_settings_of_http2_state(NewSettings, State, NewState),
-    http2_state_stream(State, Stream),
-    send_frame(Stream, settings_ack_frame),
-    flush_output(Stream),
-    read_frames(NewState, Rest).
-read_frames(State, In) :-
-    phrase(settings_ack_frame, In, Rest), !,
-    debug(http2_client(open), "Got settings ack", []),
-    read_frames(State, Rest).
-read_frames(State, In) :-
-    phrase(header_frame(Ident, Headers, 4096-HTable-HTableOut, [end_stream(End)]),
-          In, Rest), !,
-    debug(http2_client(open), "Headers ~w ~w ~w ~w", [Ident, Headers,
-                                                      HTableOut, End]),
-    (End
-    -> close(Stream)
-    ; read_frames(Stream, HTableOut, Rest)).
-read_frames(Stream, HTable, In) :-
-    catch(phrase(data_frame(Ident, Data, [end_stream(End)]), In, Rest),
-          _, false), !,
-    debug(http2_client(open), "Data ~w ~s ~w", [Ident, Data, End]),
-    (End -> close(Stream) ; read_frames(Stream, HTable, Rest)).
-read_frames(Stream, HTable, In) :-
-    phrase(push_promise_frame(Ident, NewIdent,
-                              4096-HTable-HTableOut-Headers,
-                              Opts),
-           In, Rest), !,
-    debug(http2_client(open), "Got push promise ~w ~w ~w ~w ~w",
-          [Ident, NewIdent, HTableOut, Headers, Opts]),
-    read_frames(Stream, HTableOut, Rest).
-read_frames(Stream, HTable, In) :-
-    phrase(frames:frame(Type, Flags, Ident, Payload),
-           In, Rest), !,
-    debug(http2_client(open), "Other frame Type ~w flags ~w ident ~w payload ~w",
-          [Type, Flags, Ident, Payload]),
-    read_frames(Stream, HTable, Rest).
 
 %! http2_close(+Ctx) is det.
 %  Close the given stream.
 http2_close(Http2Ctx) :-
-    http2_ctx_stream(Stream),
-    http2_ctx_worker_thread_id(ThreadId),
+    http2_ctx_stream(Http2Ctx, Stream),
+    http2_ctx_worker_thread_id(Http2Ctx, ThreadId),
     thread_signal(ThreadId, exit),
     close(Stream).
 
-%! http2_request(+Stream, +Method, +Headers, +Body, -Response) is det.
+%! http2_request(+Stream, +Method, +Headers, +Body, :Response) is det.
 %  Send an HTTP/2 request using the previously-opened HTTP/2
 %  connection =Stream=.
 %  @see http2_open/2
-http2_request(Ctx, Method, Path, Headers, Body, Response) :-
-    http2_ctx_worker_thread_id(ThreadId),
-    http2_ctx_authority(Authority),
+http2_request(Ctx, Method, Path, Headers, Body, ResponseCb) :-
+    http2_ctx_worker_thread_id(Ctx, ThreadId),
+    http2_ctx_authority(Ctx, Authority),
     FullHeaders = [':method'-Method,
                    ':path'-Path,
                    ':authority'-Authority,
