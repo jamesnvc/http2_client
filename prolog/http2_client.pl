@@ -31,7 +31,8 @@ connection_preface(`PRI * HTTP/2.0\r\n\r\nSM\r\n\r\n`).
                       data=[],
                       done=false,
                       header_table=[],
-                      header_table_size=4096).
+                      header_table_size=4096,
+                      complete_cb=false).
 
 :- record http2_state(authority=false,
                       stream=false,
@@ -82,25 +83,14 @@ http2_open(URL, Http2Ctx, Options) :-
                               message_queue(Queue),
                               worker_thread_id(WorkerThreadId)]).
 
-/*
-    send_frame(Stream,
-               header_frame(5, [indexed(':method'-'GET'),
-                                indexed(':scheme'-'https'),
-                                literal_inc(':authority'-Host),
-                                indexed(':path'-'/'),
-                                literal_inc('user-agent'-'swi-prolog')],
-                            4096-[]-HTable, [end_stream(true),
-                                             end_headers(true)])),
-    flush_output(Stream),
-*/
-
+% Worker thread
 
 listen_socket(State0) :-
     http2_state_stream(State0, Stream),
     http2_state_message_queue(State0, Queue),
     (thread_get_message(Queue, Msg, [timeout(0)])
     -> (debug(http2_client(open), "Client msg ~w", [Msg]),
-        State1 = State0)
+        handle_client_request(Msg, State0, State1))
     ;  State1 = State0),
     tcp_select([Stream], Inputs, 50),
     (Inputs = [Stream]
@@ -111,16 +101,21 @@ listen_socket(State0) :-
     ;  State2 = State1),
     listen_socket(State2).
 
-    %% debug(http2_client(open), "Server settings ~w", [Settings]),
-    %% phrase(settings_ack_frame, AckCodes),
-    %% put_codes(Stream, AckCodes),
-
-    %% copy_stream_data(Stream, user_output).
-
-update_settings(New, [], New).
-update_settings(Old, [K-V|Rest], New) :-
-    put_dict(K, Old, V, Update),
-    update_settings(Update, Rest, New).
+handle_client_request(done, _, _) :- throw(finished).
+handle_client_request(Msg, State0, State2) :-
+    Msg = request{headers: Headers_,
+                  body: Body,
+                  on_complete: ResponseCb},
+    http2_state_authority(State0, Authority),
+    Headers = [':authority'-Authority|Headers_],
+    http2_state_next_stream_id(State0, Ident),
+    stream_info(State, Ident, StreamInfo0),
+    set_complete_cb_of_http2_stream(ResponseCb, StreamInfo0, StreamInfo1),
+    update_state_substream(Ident, StreamInfo1, State0, State1),
+    NextIdent is Ident + 2,
+    set_next_stream_id_of_http2_state(NextIdent, State1, State2),
+    % TODO: break headers & body into frames, send, set callback
+    true.
 
 read_frame(State0, In, State1, Rest) :-
     phrase(frames:frame(Type, Flags, Ident, Payload),
@@ -222,6 +217,47 @@ handle_frame(0x9, Ident, State0, In, State1, Rest) :- % continuation frame
                             StreamInfo, StreamInfo1),
     update_state_substream(Ident, StreamInfo1, State0, State1).
 
+%! http2_close(+Ctx) is det.
+%  Close the given stream.
+http2_close(Http2Ctx) :-
+    http2_ctx_worker_thread_id(Http2Ctx, ThreadId),
+    http2_ctx_message_queue(Http2Ctx, Queue),
+    thread_send_message(Queue, done),
+    thread_join(ThreadId, Status),
+    debug(http2_client(open), "Joined worker thread ~w", [Status]),
+    Status = exception(finished).
+
+%! http2_request(+Stream, +Method, +Headers, +Body, :Response) is det.
+%  Send an HTTP/2 request using the previously-opened HTTP/2
+%  connection =Stream=.
+%  @see http2_open/2
+http2_request(Ctx, Method, Path, Headers, Body, ResponseCb) :-
+    http2_ctx_message_queue(Ctx, Queue),
+    FullHeaders = [':method'-Method,
+                   ':path'-Path
+                   |Headers],
+    Msg = request{headers: FullHeaders,
+                  body: Body,
+                  on_complete: ResponseCb},
+    thread_send_message(Queue, Msg).
+
+% Helper predicates
+
+:- meta_predicate send_frame(+, :).
+send_frame(Stream, Frame) :-
+    phrase(Frame, FrameCodes),
+    debug(http2_client(open), "Sending data ~w", [FrameCodes]),
+    put_codes(Stream, FrameCodes).
+
+put_codes(Stream, Codes) :-
+    open_codes_stream(Codes, CodesStream),
+    copy_stream_data(CodesStream, Stream).
+
+update_settings(New, [], New).
+update_settings(Old, [K-V|Rest], New) :-
+    put_dict(K, Old, V, Update),
+    update_settings(Update, Rest, New).
+
 stream_info(State, Ident, Stream) :-
     http2_state_substreams(State, Streams),
     (get_dict(Ident, Streams, Stream)
@@ -233,35 +269,3 @@ update_state_substream(Ident, StreamInfo, State0, State1) :-
     http2_state_substreams(State0, Streams0),
     put_dict(Ident, Streams0, StreamInfo, Streams1),
     set_substreams_of_http2_state(Streams1, State0, State1).
-
-%! http2_close(+Ctx) is det.
-%  Close the given stream.
-http2_close(Http2Ctx) :-
-    http2_ctx_stream(Http2Ctx, Stream),
-    http2_ctx_worker_thread_id(Http2Ctx, ThreadId),
-    thread_signal(ThreadId, exit),
-    close(Stream).
-
-%! http2_request(+Stream, +Method, +Headers, +Body, :Response) is det.
-%  Send an HTTP/2 request using the previously-opened HTTP/2
-%  connection =Stream=.
-%  @see http2_open/2
-http2_request(Ctx, Method, Path, Headers, Body, ResponseCb) :-
-    http2_ctx_worker_thread_id(Ctx, ThreadId),
-    http2_ctx_authority(Ctx, Authority),
-    FullHeaders = [':method'-Method,
-                   ':path'-Path,
-                   ':authority'-Authority,
-                   ':scheme'-https
-                   |Headers],
-    true.
-
-:- meta_predicate send_frame(+, :).
-send_frame(Stream, Frame) :-
-    phrase(Frame, FrameCodes),
-    debug(http2_client(open), "Sending data ~w", [FrameCodes]),
-    put_codes(Stream, FrameCodes).
-
-put_codes(Stream, Codes) :-
-    open_codes_stream(Codes, CodesStream),
-    copy_stream_data(CodesStream, Stream).
