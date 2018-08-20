@@ -1,4 +1,5 @@
-:- module(hpack, [hpack//2]).
+:- module(hpack, [hpack//2,
+                  lookup_header/3]).
 /** <module> HPACK, library for parsing RFC 7541 HPACK headers
 
 @author James Cash

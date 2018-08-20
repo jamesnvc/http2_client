@@ -15,6 +15,7 @@
 :- use_module(library(url), [parse_url/2]).
 :- use_module(library(record)).
 :- use_module(frames).
+:- use_module(hpack, [lookup_header/3]).
 
 %% :- use_foreign_library(ssl_alpns).
 
@@ -27,12 +28,12 @@ connection_preface(`PRI * HTTP/2.0\r\n\r\nSM\r\n\r\n`).
                     worker_thread_id=false).
 
 % TODO: store state of connection, to determine what's valid to recieve/send
-:- record http_stream(headers=[],
-                      data=[],
-                      done=false,
-                      header_table=[],
-                      header_table_size=4096,
-                      complete_cb=false).
+:- record http2_stream(headers=[],
+                       data=[],
+                       done=false,
+                       header_table=[],
+                       header_table_size=4096,
+                       complete_cb=false).
 
 :- record http2_state(authority=false,
                       stream=false,
@@ -101,21 +102,49 @@ listen_socket(State0) :-
     ;  State2 = State1),
     listen_socket(State2).
 
+% Worker thread - sending requests
+
 handle_client_request(done, _, _) :- throw(finished).
-handle_client_request(Msg, State0, State2) :-
+handle_client_request(Msg, State0, State3) :-
     Msg = request{headers: Headers_,
                   body: Body,
                   on_complete: ResponseCb},
     http2_state_authority(State0, Authority),
     Headers = [':authority'-Authority|Headers_],
     http2_state_next_stream_id(State0, Ident),
-    stream_info(State, Ident, StreamInfo0),
+    stream_info(State0, Ident, StreamInfo0),
     set_complete_cb_of_http2_stream(ResponseCb, StreamInfo0, StreamInfo1),
     update_state_substream(Ident, StreamInfo1, State0, State1),
     NextIdent is Ident + 2,
     set_next_stream_id_of_http2_state(NextIdent, State1, State2),
     % TODO: break headers & body into frames, send, set callback
+    send_request_headers(Headers, Ident, State2, State3),
     true.
+
+send_request_headers(Headers_, Ident, State0, State1) :-
+    stream_info(State0, Ident, StreamInfo),
+    http2_stream_header_table(StreamInfo, Table0),
+    wrapped_headers(Table0, Headers_, Headers),
+    http2_stream_header_table_size(StreamInfo, TableSize),
+    http2_state_stream(State0, Stream),
+    % TOOD: check size of header frame & split into header +
+    % continuation if too large
+    send_frame(Stream,
+               header_frame(Ident, Headers, TableSize-Table0-Table1,
+                            [end_headers(true)])),
+    set_header_table_of_http2_stream(Table1, StreamInfo, StreamInfo1),
+    update_state_substream(Ident, StreamInfo1, State0, State1).
+
+wrapped_headers(_, [], []) :- !.
+wrapped_headers(Table, [K-V|RestH], [indexed(K-V)|RestW]) :-
+    lookup_header(Table, K-V, _), !,
+    wrapped_headers(Table, RestH, RestW).
+wrapped_headers(Table, [K-V|RestH], [literal_header_inc_idx(K-V)|RestW]) :-
+    !, wrapped_headers(Table, RestH, RestW).
+wrapped_headers(Table, [KV|RestH], [KV|RestW]) :-
+    wrapped_headers(Table, RestH, RestW).
+
+% Worker thread - recieving data from server
 
 read_frame(State0, In, State1, Rest) :-
     phrase(frames:frame(Type, Flags, Ident, Payload),
