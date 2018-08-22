@@ -107,7 +107,7 @@ handle_client_request(Msg, State0, State4) :-
                   body: Body,
                   on_complete: ResponseCb},
     http2_state_authority(State0, Authority),
-    Headers = [':authority'-Authority|Headers_],
+    Headers = [':authority'-Authority,':scheme'-https|Headers_],
     http2_state_next_stream_id(State0, Ident),
     debug(http2_client(open), "Next stream ~w", [Ident]),
     stream_info(State0, Ident, StreamInfo0),
