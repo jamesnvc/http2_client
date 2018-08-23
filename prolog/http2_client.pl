@@ -306,6 +306,7 @@ http2_close(Http2Ctx) :-
     http2_ctx_worker_thread_id(Http2Ctx, ThreadId),
     thread_send_message(ThreadId, done).
 
+:- meta_predicate http2_request(+, +, +, +, +, 2).
 %! http2_request(+Stream, +Method, +Headers, +Body, :Response) is det.
 %  Send an HTTP/2 request using the previously-opened HTTP/2
 %  connection =Stream=.
