@@ -361,15 +361,3 @@ remove_state_substream(Ident, State0, State1) :-
     http2_state_substreams(State0, Streams0),
     del_dict(Ident, Streams0, _, Streams1),
     set_substreams_of_http2_state(Streams1, State0, State1).
-
-test_cb(Ctx, Headers, Body) :-
-    length(Body, BodyCount),
-    debug(http2_client(open), "Got response! ~w ~w", [Headers, BodyCount]),
-    http2_close(Ctx).
-test_stuff :-
-    debug(http2_client(open)),
-    http2_open('https://localhost:9090', Ctx, []),
-    %% http2_open('https://http2.akamai.com', Ctx, []),
-    debug(http2_client(open), "Opened ctx ~w", [Ctx]),
-    http2_request(Ctx, 'GET', '/', ['user-agent'-'swi-prolog'], [],
-                 test_cb(Ctx)).
