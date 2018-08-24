@@ -1,6 +1,6 @@
 :- module(http2_client, [http2_open/3,
                          http2_close/1,
-                         http2_request/6]).
+                         http2_request/4]).
 /** <module> HTTP/2 client
 
 @author James Cash
@@ -306,18 +306,15 @@ http2_close(Http2Ctx) :-
     http2_ctx_worker_thread_id(Http2Ctx, ThreadId),
     thread_send_message(ThreadId, done).
 
-:- meta_predicate http2_request(+, +, +, +, +, 2).
+:- meta_predicate http2_request(+, +, +, 2).
 %! http2_request(+Stream, +Method, +Headers, +Body, :Response) is det.
 %  Send an HTTP/2 request using the previously-opened HTTP/2
 %  connection =Stream=.
 %  @see http2_open/2
-http2_request(Ctx, Method, Path, Headers, Body, ResponseCb) :-
+http2_request(Ctx, Headers, Body, ResponseCb) :-
     debug(http2_client(request), "Sending request ~w", [Ctx]),
     http2_ctx_worker_thread_id(Ctx, WorkerId),
-    FullHeaders = [':method'-Method,
-                   ':path'-Path
-                   |Headers],
-    Msg = request{headers: FullHeaders,
+    Msg = request{headers: Headers,
                   body: Body,
                   on_complete: ResponseCb},
     thread_send_message(WorkerId, Msg).
