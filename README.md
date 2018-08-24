@@ -6,6 +6,8 @@ It currently does not support server push and assumes correct input from servers
 
 Only HTTP/2 over TLS is supported, which requires an as-yet-unreleased version of SWI-Prolog with [TLS-ALPN support](https://github.com/SWI-Prolog/packages-ssl/pull/130).
 
+**Contributions extremely welcome**
+
 Requires the `list_util` and `delay` packs.
 
 Uses the [reif](http://www.complang.tuwien.ac.at/ulrich/Prolog-inedit/swi/reif.pl) library.
