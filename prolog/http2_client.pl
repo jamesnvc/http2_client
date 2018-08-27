@@ -19,11 +19,6 @@
 
 connection_preface(`PRI * HTTP/2.0\r\n\r\nSM\r\n\r\n`).
 
-:- predicate_options(http2_open/3, 3, [pass_to(ssl_context/3)]).
-
-:- record http2_ctx(stream=false,
-                    worker_thread_id=false).
-
 default_complete_cb(Headers, _Body) :-
     debug(http2_client(open), "Complete without callback set ~w", [Headers]).
 % TODO: store state of connection, to determine what's valid to recieve/send
@@ -46,6 +41,9 @@ default_complete_cb(Headers, _Body) :-
                       last_stream_id=0,
                       substreams=streams{}).
 
+:- predicate_options(http2_open/3, 3, [pass_to(ssl_context/3)]).
+:- record http2_ctx(stream=false,
+                    worker_thread_id=false).
 %! http2_open(+URL, -HTTP2Ctx, +Options) is det.
 %  Open =Stream= as an HTTP/2 connection to =URL='s host.
 http2_open(URL, Http2Ctx, Options) :-
@@ -78,6 +76,25 @@ http2_open(URL, Http2Ctx, Options) :-
     thread_create(listen_socket(State), WorkerThreadId, []),
     make_http2_ctx([stream(Stream), worker_thread_id(WorkerThreadId)],
                    Http2Ctx).
+
+%! http2_close(+Ctx) is det.
+%  Close the given stream.
+http2_close(Http2Ctx) :-
+    http2_ctx_worker_thread_id(Http2Ctx, ThreadId),
+    thread_send_message(ThreadId, done).
+
+:- meta_predicate http2_request(+, +, +, 2).
+%! http2_request(+Stream, +Method, +Headers, +Body, :Response) is det.
+%  Send an HTTP/2 request using the previously-opened HTTP/2
+%  connection =Stream=.
+%  @see http2_open/2
+http2_request(Ctx, Headers, Body, ResponseCb) :-
+    debug(http2_client(request), "Sending request ~w", [Ctx]),
+    http2_ctx_worker_thread_id(Ctx, WorkerId),
+    Msg = request{headers: Headers,
+                  body: Body,
+                  on_complete: ResponseCb},
+    thread_send_message(WorkerId, Msg).
 
 % Worker thread
 
@@ -285,6 +302,8 @@ handle_frame(0x9, Ident, State0, In, State2) :- % continuation frame
 handle_frame(Code, _, State, In, State) :-
     debug(http2_client(response), "Unknown frame ~w: ~w", [Code, In]).
 
+% Worker thread - Completing a request
+
 complete_client(Ident, State0, State1) :-
     stream_info(State0, Ident, StreamInfo),
     notify_client_done(StreamInfo),
@@ -298,26 +317,7 @@ notify_client_done(StreamInfo) :-
           Err,
           debug(http2_client(request), "Error invoking cb ~w", [Err])).
 
-%! http2_close(+Ctx) is det.
-%  Close the given stream.
-http2_close(Http2Ctx) :-
-    http2_ctx_worker_thread_id(Http2Ctx, ThreadId),
-    thread_send_message(ThreadId, done).
-
-:- meta_predicate http2_request(+, +, +, 2).
-%! http2_request(+Stream, +Method, +Headers, +Body, :Response) is det.
-%  Send an HTTP/2 request using the previously-opened HTTP/2
-%  connection =Stream=.
-%  @see http2_open/2
-http2_request(Ctx, Headers, Body, ResponseCb) :-
-    debug(http2_client(request), "Sending request ~w", [Ctx]),
-    http2_ctx_worker_thread_id(Ctx, WorkerId),
-    Msg = request{headers: Headers,
-                  body: Body,
-                  on_complete: ResponseCb},
-    thread_send_message(WorkerId, Msg).
-
-% Helper predicates
+% Other helper predicates
 
 :- meta_predicate send_frame(+, :).
 send_frame(Stream, Frame) :-
