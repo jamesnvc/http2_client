@@ -1,8 +1,14 @@
 :- module(huffman, [atom_huffcodes/2]).
+/** <module> hpack/huffman, HPACK's implementation of Huffman encoding
+
+@author James Cash
+*/
 
 :- use_module(library(clpfd)).
 :- use_module(library(delay), [delay/1]).
 
+%! atom_huffcodes(?Atom, ?Codes) is det.
+%  True when =Atom= Huffman-encodes to =Codes=.
 atom_huffcodes(Atom, HuffCodes) :-
     atom(Atom), !,
     atom_codes(Atom, Codes),

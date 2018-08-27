@@ -1,5 +1,10 @@
 :- module(static_headers, [static_header/2]).
+/** <module> hpack/static_headers, the RFC-defined static header tables for HPACK
 
+@author James Cash
+*/
+
+%! static_header(?Index, ?NameValue) is semidet.
 static_header(1,  ':authority'-false).
 static_header(2,  ':method'-'GET').
 static_header(3,  ':method'-'POST').
