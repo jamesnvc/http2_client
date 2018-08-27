@@ -48,6 +48,15 @@ frame(Type, Flags, Ident, Payload) -->
 % SETTINGS_MAX_FRAME_SIZE
 % (default 2^14 octets)
 
+/*
+ +---------------+
+ |Pad Length? (8)|
+ +---------------+-----------------------------------------------+
+ |                            Data (*)                         ...
+ +---------------------------------------------------------------+
+ |                           Padding (*)                       ...
+ +---------------------------------------------------------------+
+*/
 :- record data_opts(padded=0, end_stream=false).
 :- predicate_options(data_frame//3, 3, [padded(integer),
                                         end_stream(boolean)]).
@@ -90,6 +99,19 @@ data_frame(StreamIdent, Data, Options) -->
     [Flags], int31(StreamIdent),
     PadLenBytes, Data, PadBytes, !.
 
+/*
+ +---------------+
+ |Pad Length? (8)|
+ +-+-------------+-----------------------------------------------+
+ |E|                 Stream Dependency? (31)                     |
+ +-+-------------+-----------------------------------------------+
+ |  Weight? (8)  |
+ +-+-------------+-----------------------------------------------+
+ |                   Header Block Fragment (*)                 ...
+ +---------------------------------------------------------------+
+ |                           Padding (*)                       ...
+ +---------------------------------------------------------------+
+*/
 :- record header_opts(end_stream=false,
                       end_headers=true,
                       padded=0,
@@ -182,6 +204,13 @@ header_frame(StreamIdent, Headers, Size-Table0-Table1, Options) -->
     EStreamDepBytes, WeightBytes,
     Data, PadBytes, !.
 
+/*
+ +-+-------------------------------------------------------------+
+ |E|                  Stream Dependency (31)                     |
+ +-+-------------+-----------------------------------------------+
+ |   Weight (8)  |
+ +-+-------------+
+*/
 %! priority_frame(?StreamIdent:integer, ?Exclusive:boolean, ?StreamDep:integer, ?Weight:integer)//
 priority_frame(StreamIdent, Exclusive, StreamDep, Weight) -->
     int24(5), [0x02, 0],
@@ -193,10 +222,23 @@ priority_frame(StreamIdent, Exclusive, StreamDep, Weight) -->
     int31(StreamIdent),
     int32(E_StreamDep), [Weight].
 
+/*
+ +---------------------------------------------------------------+
+ |                        Error Code (32)                        |
+ +---------------------------------------------------------------+
+*/
 %! rst_frame(?StreamIdent:integer, ?ErrorCode:integer)//
 rst_frame(StreamIdent, ErrCode) -->
     int24(4), [0x3, 0], int31(StreamIdent), int32(ErrCode).
 
+/*
+ +-------------------------------+
+ |       Identifier (16)         |
+ +-------------------------------+-------------------------------+
+ |                        Value (32)                             |
+ +---------------------------------------------------------------+
+ ...
+*/
 %! settings_frame(?Settings:list)//
 settings_frame(Settings) -->
     int24(Length),
@@ -225,12 +267,22 @@ setting_name_num(N, N).
 settings_ack_frame -->
     int24(0), [0x4, 0x1], int32(0).
 
+/*
+ +---------------+
+ |Pad Length? (8)|
+ +-+-------------+-----------------------------------------------+
+ |R|                  Promised Stream ID (31)                    |
+ +-+-----------------------------+-------------------------------+
+ |                   Header Block Fragment (*)                 ...
+ +---------------------------------------------------------------+
+ |                           Padding (*)                       ...
+ +---------------------------------------------------------------+
+*/
 :- record push_promise_opts(end_headers=true,
                             padded=0).
 :- predicate_options(push_promise_frame//4, 4,
                      [end_headers(boolean),
                       padded(integer)]).
-
 %! push_promise_frame(?StreamIdent:integer, ?NewStreamID:integer, ?HeaderInfo, ?Options:list)//
 %  DCG for a push-promise frame, which is a frame notifying the
 %  receiver about a new stream the sender intends to initiate.
@@ -278,6 +330,13 @@ push_promise_frame(StreamIdent, NewStreamIdent, HeaderTableInfo-Headers, Options
     int31(StreamIdent),
     PadLenBytes, int32(R_NewStreamIdent), Data, PadBytes, !.
 
+/*
+ +---------------------------------------------------------------+
+ |                                                               |
+ |                      Opaque Data (64)                         |
+ |                                                               |
+ +---------------------------------------------------------------+
+*/
 %! ping_frame(?Data:list, ?Ack:boolean)//
 ping_frame(Data, Ack) -->
     { if_(Ack = true, Flags #= 0x1,
@@ -285,6 +344,15 @@ ping_frame(Data, Ack) -->
       length(Data, 8) },
     frame(0x6, Flags, 0x0, Data), !.
 
+/*
+ +-+-------------------------------------------------------------+
+ |R|                  Last-Stream-ID (31)                        |
+ +-+-------------------------------------------------------------+
+ |                      Error Code (32)                          |
+ +---------------------------------------------------------------+
+ |                  Additional Debug Data (*)                    |
+ +---------------------------------------------------------------+
+*/
 %! goaway_frame(?LastStreamId, ?ErrorCode, ?Data)//
 goaway_frame(LastStreamId, Error, Data) -->
     int24(Length), [0x7, 0], int32(0),
@@ -293,12 +361,22 @@ goaway_frame(LastStreamId, Error, Data) -->
     int31(LastStreamId), int32(Error),
     Data.
 
+/*
+ +-+-------------------------------------------------------------+
+ |R|              Window Size Increment (31)                     |
+ +-+-------------------------------------------------------------+
+*/
 %! window_update_frame(?StreamIdent, ?Increment)//
 window_update_frame(StreamIdent, Increment) -->
     int24(4),  [0x8, 0],
     int31(StreamIdent),
     int31(Increment).
 
+/*
+ +---------------------------------------------------------------+
+ |                   Header Block Fragment (*)                 ...
+ +---------------------------------------------------------------+
+*/
 %! continuation_frame(?StreamIdent:integer, ?HeaderInfo, ?End:boolean)//
 %  @arg HeaderInfo Information to be passed to hpack:hpack//2
 %        =| HeaderInfo = HeaderTableSize-TableIn-TableOut-HeaderList |=
