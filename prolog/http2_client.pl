@@ -17,8 +17,6 @@
 :- use_module(frames).
 :- use_module(hpack, [lookup_header/3]).
 
-%% :- use_foreign_library(ssl_alpns).
-
 connection_preface(`PRI * HTTP/2.0\r\n\r\nSM\r\n\r\n`).
 
 :- predicate_options(http2_open/3, 3, [pass_to(ssl_context/3)]).
