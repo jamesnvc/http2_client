@@ -96,6 +96,10 @@ literal_header_never_idx(_, K-V) -->
 
 % Header lookups
 
+%! lookup_header(+DynamicTable, +NameValue, -Index) is semidet.
+%
+%  True when =Index= is the table index for the header with name
+%  =Name= & value =Value=, given the dynamic table =DynamicTable=.
 lookup_header(_Dt, KV, Idx) :-
     static_header(Idx, KV).
 lookup_header(Dt, KV, Idx) :-
