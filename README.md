@@ -4,7 +4,7 @@
 
 It currently does not support server push and assumes correct input from servers -- it is not robust in the face of server errors or invalid data being sent.
 
-Only HTTP/2 over TLS is supported, which requires an as-yet-unreleased version of SWI-Prolog with [TLS-ALPN support](https://github.com/SWI-Prolog/packages-ssl/pull/130).
+Only HTTP/2 over TLS is supported, which requires SWI-Prolog 7.7.19 or greater for TLS-ALPN support.
 
 **Contributions extremely welcome**
 
