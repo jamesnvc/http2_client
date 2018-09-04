@@ -5,6 +5,7 @@
 @author James Cash
 */
 
+:- use_module(library(apply_macros)).
 :- use_module(library(clpfd)).
 :- use_module(library(when), [when/2]).
 :- use_module(library(delay), [delay/1]).

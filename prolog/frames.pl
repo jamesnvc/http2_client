@@ -14,6 +14,7 @@
 @author James Cash
 */
 
+:- use_module(library(apply_macros)).
 :- use_module(library(clpfd)).
 :- use_module(library(record)).
 :- use_module(library(predicate_options)).
