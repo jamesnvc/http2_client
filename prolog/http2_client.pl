@@ -88,7 +88,7 @@ http2_close(Http2Ctx) :-
 %  Send an HTTP/2 request using the previously-opened HTTP/2
 %  connection =Stream=.
 %
-%  @see http2_open/2
+%  @see http2_open/3
 http2_request(Ctx, Headers, Body, ResponseCb) :-
     debug(http2_client(request), "Sending request ~w", [Ctx]),
     http2_ctx_worker_thread_id(Ctx, WorkerId),
