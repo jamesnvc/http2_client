@@ -29,6 +29,9 @@ default_complete_cb(Headers, _Body) :-
                        header_table_size=4096,
                        complete_cb=default_complete_cb).
 
+default_close_cb(Data) :-
+    debug(http2_client(open), "Connection closed without callback set ~w", [Data]).
+
 :- record http2_state(authority=false,
                       stream=false,
                       settings=settings{header_table_size: 4096,
@@ -39,9 +42,11 @@ default_complete_cb(Headers, _Body) :-
                                         max_header_list_size: unlimited},
                       next_stream_id=1,
                       last_stream_id=0,
-                      substreams=streams{}).
+                      substreams=streams{},
+                      close_cb=default_close_cb).
 
-:- predicate_options(http2_open/3, 3, [pass_to(ssl_context/3)]).
+:- predicate_options(http2_open/3, 3, [close_cb(callable),
+                                       pass_to(ssl_context/3)]).
 :- record http2_ctx(stream=false,
                     worker_thread_id=false).
 %! http2_open(+URL, -HTTP2Ctx, +Options) is det.
@@ -72,7 +77,11 @@ http2_open(URL, Http2Ctx, Options) :-
     send_frame(Stream, settings_frame([enable_push-0])),
     flush_output(Stream),
     % XXX: ...then we read a SETTINGS from from server & ACK it
-    make_http2_state([authority(Host), stream(Stream)], State),
+    (memberchk(close_cb(CloseCb), Options) ; CloseCb = default_close_cb),
+    make_http2_state([authority(Host),
+                      stream(Stream),
+                      close_cb(CloseCb)],
+                     State),
     thread_create(listen_socket(State), WorkerThreadId, []),
     make_http2_ctx([stream(Stream), worker_thread_id(WorkerThreadId)],
                    Http2Ctx).
@@ -273,8 +282,10 @@ handle_frame(0x6, _, State, In, State) :- % ping frame
 handle_frame(0x7, _, State0, In, State0) :- % goaway frame
     phrase(goaway_frame(LastStreamId, Error, Data), In),
     debug(http2_client(response), "GOAWAY frame: ~w ~w ~w", [LastStreamId, Error, Data]),
-    % TODO: need to stop stuff now
-    true.
+    http2_state_close_cb(State0, CloseCb),
+    call(CloseCb, _{last_stream_id: LastStreamId,
+                    error: Error,
+                    data: Data}).
 handle_frame(0x8, _, State0, In, State0) :- % window frame
     phrase(window_update_frame(Ident, Increment), In), !,
     debug(http2_client(response), "window frame ~w ~w", [Ident, Increment]),
