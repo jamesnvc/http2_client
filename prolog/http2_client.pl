@@ -67,7 +67,7 @@ http2_open(URL, Http2Ctx, Options) :-
     stream_pair(Stream, SSLRead, SSLWrite),
     % HTTP/2 connection starts with preface...
     connection_preface(ConnectionPreface),
-    put_codes(Stream, ConnectionPreface),
+    format(Stream, "~s", [ConnectionPreface]),
     % ...then SETTINGS frame
     send_frame(Stream, settings_frame([enable_push-0])),
     flush_output(Stream),
@@ -324,11 +324,7 @@ notify_client_done(StreamInfo) :-
 send_frame(Stream, Frame) :-
     debug(http2_client(request), "sending frame ~w", [Frame]),
     phrase(Frame, FrameCodes), !,
-    put_codes(Stream, FrameCodes).
-
-put_codes(Stream, Codes) :-
-    open_codes_stream(Codes, CodesStream),
-    copy_stream_data(CodesStream, Stream).
+    format(Stream, "~s", [FrameCodes]).
 
 update_settings(New, [], New).
 update_settings(Old, [K-V|Rest], New) :-
