@@ -51,6 +51,10 @@ default_close_cb(Data) :-
                     worker_thread_id=false).
 %! http2_open(+URL, -HTTP2Ctx, +Options) is det.
 %  Open =Stream= as an HTTP/2 connection to =URL='s host.
+%
+%   @arg Options passed to ssl_context/3. http2_open-specific options:
+%         * close_cb(Callable)
+%           Predicate to be called when the connection receives a GOAWAY frame.
 http2_open(URL, Http2Ctx, Options) :-
     % Open TLS connection
     parse_url(URL, [protocol(https),host(Host)|Attrs]),
@@ -77,7 +81,7 @@ http2_open(URL, Http2Ctx, Options) :-
     send_frame(Stream, settings_frame([enable_push-0])),
     flush_output(Stream),
     % XXX: ...then we read a SETTINGS from from server & ACK it
-    (memberchk(close_cb(CloseCb), Options) ; CloseCb = default_close_cb),
+    (memberchk(close_cb(CloseCb), Options), ! ; CloseCb = default_close_cb),
     make_http2_state([authority(Host),
                       stream(Stream),
                       close_cb(CloseCb)],
@@ -240,13 +244,13 @@ handle_frame(0x1, Ident, State0, In, State2) :- % headers frame
     -> complete_client(Ident, State1, State2)
     ;  State2 = State1).
 handle_frame(0x2, _Ident, State0, _In, State0). % priority frame
-handle_frame(0x3, Ident, State0, In, State1) :- % rst frame
+handle_frame(0x3, Ident, State0, In, State2) :- % rst frame
     phrase(rst_frame(Ident, ErrCode), In), !,
     debug(http2_client(response), "Rst frame ~w ~w", [Ident, ErrCode]),
     stream_info(State0, Ident, StreamInfo0),
     set_done_of_http2_stream(true, StreamInfo0, StreamInfo1),
-    % TODO: indicate error to client
-    update_state_substream(Ident, StreamInfo1, State0, State1).
+    update_state_substream(Ident, StreamInfo1, State0, State1),
+    complete_client(Ident, State1, State2).
 handle_frame(0x4, _, State0, In, State0) :- % settings ack frame
     phrase(settings_ack_frame, In), !.
 handle_frame(0x4, _, State0, In, State1) :- % settings frame
