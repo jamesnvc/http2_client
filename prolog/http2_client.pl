@@ -11,11 +11,19 @@
                              cert_accept_any/5]).
 :- use_module(library(socket), [tcp_connect/3,
                                 tcp_select/3,
+                                tcp_fcntl/3,
                                 tcp_host_to_address/2]).
 :- use_module(library(url), [parse_url/2]).
 :- use_module(library(record)).
 :- use_module(frames).
 :- use_module(hpack, [lookup_header/3]).
+
+:- multifile prolog:message//1.
+prolog:message(unknown_frame(Code, In, State)) -->
+    [ "Unknown HTTP/2 frame ~w: ~w~nState: ~w"-[Code, In, State] ].
+prolog:message(bad_frame(State, In)) -->
+    [ "Couldn't read frame from ~w~nState: ~w"-[In, State] ].
+prolog:message(worker_died) --> [ "Worker thread died"-[] ].
 
 connection_preface(`PRI * HTTP/2.0\r\n\r\nSM\r\n\r\n`).
 
@@ -86,9 +94,12 @@ http2_open(URL, Http2Ctx, Options) :-
                       stream(Stream),
                       close_cb(CloseCb)],
                      State),
-    thread_create(listen_socket(State), WorkerThreadId, []),
+    thread_create(listen_socket(State), WorkerThreadId, [at_exit(warn_worker_died)]),
     make_http2_ctx([stream(Stream), worker_thread_id(WorkerThreadId)],
                    Http2Ctx).
+
+warn_worker_died :-
+    print_message(warning, worker_died).
 
 %! http2_close(+Ctx) is det.
 %  Close the given stream.
@@ -206,6 +217,9 @@ read_frame(State0, In, State2, Rest) :-
     debug(http2_client(response), "Update last seen frame ~w", [NewLastIdent]),
     handle_frame(Type, Ident, State1, Bytes, State2),
     debug(http2_client(response), "Handled frame", []).
+read_frame(State, In, _, _) :-
+    print_message(warning, bad_frame(State, In)),
+    !, fail.
 
 handle_frame(0x0, _, State0, In, State2) :- % data frame
     phrase(data_frame(Ident, Data, [end_stream(End)]), In), !,
@@ -316,11 +330,8 @@ handle_frame(0x9, Ident, State0, In, State3) :- % continuation frame
     -> complete_client(Ident, State2, State3)
     ;  State3 = State2).
 handle_frame(Code, _, State, In, State) :-
-    print_message(warning, unknown_frame(Code, In, State)).
-
-:- multifile prolog:message//1.
-prolog:message(unknown_frame(Code, In, State)) -->
-    [ "Unknown HTTP/2 frame ~w: ~w~nState: ~w"-[Code, In, State] ].
+    print_message(warning, unknown_frame(Code, In, State)),
+    !, fail.
 
 % Worker thread - Completing a request
 
