@@ -77,7 +77,7 @@ http2_open(URL, Http2Ctx, Options) :-
     tcp_connect(Address:Port, PlainStreamPair, []),
     debug(http2_client(open), "Connected", []),
     stream_pair(PlainStreamPair, PlainRead, PlainWrite),
-    tcp_fcntl(PlainRead, setfl, nonblock),
+    set_stream(PlainRead, buffer(false)),
     ssl_negotiate(Ctx, PlainRead, PlainWrite,
                   SSLRead, SSLWrite),
     debug(http2_client(open), "Negotiated", []),
@@ -132,10 +132,13 @@ listen_socket(State0) :-
     ;  State1 = State0), !,
 
     http2_state_stream(State1, Stream),
-    fill_buffer(Stream),
-    read_pending_codes(Stream, Codes, Tail),
-    Tail = [],
-    read_frames(Codes, State1, State2),
+    tcp_select([Stream], Input, 0),
+    (Input = [Stream]
+    -> (fill_buffer(Stream),
+        read_pending_codes(Stream, Codes, Tail),
+        Tail = [],
+        read_frames(Codes, State1, State2))
+    ; State1 = State2),
 
     listen_socket(State2).
 
