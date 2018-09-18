@@ -125,9 +125,6 @@ http2_request(Ctx, Headers, Body, ResponseCb) :-
 
 listen_socket(State0) :-
     http2_state_stream(State0, Stream),
-    stream_to_lazy_list(Stream, StreamList),
-    listen_socket(State0, StreamList).
-listen_socket(State0, StreamList) :-
     thread_self(ThreadId),
     (thread_get_message(ThreadId, Msg, [timeout(0)])
     -> (debug(http2_client(request), "Client msg ~k", [Msg]),
@@ -135,14 +132,22 @@ listen_socket(State0, StreamList) :-
     ;  State1 = State0), !,
 
     http2_state_stream(State1, Stream), tcp_select([Stream], Inputs, 0),
-    ((Inputs = [Stream] ; \+ attvar(StreamList))
-    -> (debug(http2_client(response), "Data ready ~w", [StreamList]),
-        % XXX: can we just recreate the lazy list? will that work?
-        read_frame(State1, StreamList, State2, StreamListRest),
-        debug(http2_client(response), "Stream rest = ~w", [StreamListRest]))
-    ;  (State2 = State1, StreamListRest = StreamList)), !,
+    ((Inputs = [Stream], \+ at_end_of_stream(Stream))
+    -> (debug(http2_client(response), "Data ready", []),
+        fill_buffer(Stream),
+        read_pending_codes(Stream, Codes, Tail),
+        Tail = [],
+        read_frames(Codes, State1, State2))
+    ;  State2 = State1), !,
 
-    listen_socket(State2, StreamListRest).
+    listen_socket(State2).
+
+read_frames([], State, State) :- !.
+read_frames(Codes, State0, State2) :-
+    read_frame(State0, Codes, State1, Rest), !,
+    debug(http2_client(response), "read frame, rest ~w", [Rest]),
+    read_frames(Rest, State1, State2).
+read_frames(_, State, State).
 
 % Worker thread - sending requests
 
