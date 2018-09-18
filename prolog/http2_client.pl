@@ -11,7 +11,6 @@
                              cert_accept_any/5]).
 :- use_module(library(socket), [tcp_connect/3,
                                 tcp_select/3,
-                                tcp_fcntl/3,
                                 tcp_host_to_address/2]).
 :- use_module(library(url), [parse_url/2]).
 :- use_module(library(record)).
