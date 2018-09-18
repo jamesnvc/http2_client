@@ -135,8 +135,7 @@ listen_socket(State0, StreamList) :-
     ;  State1 = State0), !,
 
     http2_state_stream(State1, Stream), tcp_select([Stream], Inputs, 0),
-    ((( Inputs = [Stream], \+ at_end_of_stream(Stream) )
-     ; \+ attvar(StreamList))
+    ((( Inputs = [Stream], \+ at_end_of_stream(Stream) ) ; \+ attvar(StreamList))
     -> (debug(http2_client(response), "Data ready ~w", [StreamList]),
         % XXX: can we just recreate the lazy list? will that work?
         read_frame(State1, StreamList, State2, StreamListRest),
