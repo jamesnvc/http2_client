@@ -133,7 +133,8 @@ listen_socket(State0) :-
     thread_self(ThreadId),
     (thread_get_message(ThreadId, Msg, [timeout(0)])
     -> (debug(http2_client(request), "Client msg ~k", [Msg]),
-        handle_client_request(Msg, State0, State1))
+        handle_client_request(Msg, State0, State1),
+        debug(http2_client(request), "Msg sent new state ~w", [State1]))
     ;  State1 = State0), !,
 
     http2_state_stream(State1, Stream),
