@@ -123,8 +123,8 @@ keep_fitting(Max, Cur, [K-V|Rst], [K-V|FitRest]) :-
 keep_fitting(_, _, _, []).
 
 dynamic_size_update(DT0-DT1, NewSize) -->
-    { take(NewSize, DT0, DT1) },
-    int(1, 3, NewSize).
+    int(1, 3, NewSize),
+    { keep_fitting(NewSize, DT0, DT1) }.
 
 header(_-DT0-DT0, indexed(H)) --> indexed_header(DT0, H).
 header(Ts-DT0-DT1, literal_inc(H)) --> literal_header_inc_idx(Ts-DT0-DT1, H).
