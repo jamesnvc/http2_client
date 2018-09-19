@@ -25,7 +25,9 @@ prolog:message(unknown_frame(Code, In, State)) -->
     [ "Unknown HTTP/2 frame ~w: ~w~nState: ~w"-[Code, In, State] ].
 prolog:message(bad_frame(State, In)) -->
     [ "Couldn't read frame from ~w~nState: ~w"-[In, State] ].
-prolog:message(worker_died) --> [ "Worker thread died"-[] ].
+prolog:message(connection_closed(Error, Data, State)) -->
+    [ "Connection closed with error code ~w: ~w~nClient state: ~w"-[Error, Data, State] ].
+prolog:message(worker_died) --> [ "HTTP/2 client worker thread died"-[] ].
 
 connection_preface(`PRI * HTTP/2.0\r\n\r\nSM\r\n\r\n`).
 
@@ -145,6 +147,17 @@ listen_socket(State0) :-
 
     listen_socket(State2).
 
+worker_shutdown(State, Cause) :-
+    http2_state_stream(State, Stream),
+    close(Stream),
+    debug(http2_client(open), "...closed", []),
+
+    http2_state_close_cb(State, CloseCb),
+    http2_state_last_stream_id(State, LastStreamId),
+    call(CloseCb, _{last_stream_id: LastStreamId,
+                    cause: Cause}),
+    throw(finished).
+
 read_frames([], State, State) :- !.
 read_frames(Codes, State0, State2) :-
     read_frame(State0, Codes, State1, Rest), !,
@@ -160,8 +173,7 @@ handle_client_request(done, State, _) :-
     debug(http2_client(open), "Closing connection ~w...", [LastId]),
     send_frame(Stream, goaway_frame(LastId, 0, [])),
     flush_output(Stream),
-    debug(http2_client(open), "...closed", []),
-    throw(finished).
+    worker_shutdown(State, "Client closed").
 handle_client_request(Msg, State0, State4) :-
     Msg = request{headers: Headers_,
                   body: Body,
@@ -309,10 +321,10 @@ handle_frame(0x6, _, State, In, State) :- % ping frame
 handle_frame(0x7, _, State0, In, State0) :- % goaway frame
     phrase(goaway_frame(LastStreamId, Error, Data), In),
     debug(http2_client(response), "GOAWAY frame: ~w ~w ~w", [LastStreamId, Error, Data]),
-    http2_state_close_cb(State0, CloseCb),
-    call(CloseCb, _{last_stream_id: LastStreamId,
-                    error: Error,
-                    data: Data}).
+    (Error = 0 ; print_message(warning, connection_closed(Error, Data, State0))),
+    worker_shutdown(State0, _{msg: "goaway frame",
+                              error: Error,
+                              data: Data}).
 handle_frame(0x8, _, State0, In, State0) :- % window frame
     phrase(window_update_frame(Ident, Increment), In), !,
     debug(http2_client(response), "window frame ~w ~w", [Ident, Increment]),
