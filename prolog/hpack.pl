@@ -113,12 +113,12 @@ insert_header(MaxSize, Dt0, K-V, Dt1) :-
 
 keep_fitting(Max, Lst, Fitting) :-
     keep_fitting(Max, 0, Lst, Fitting).
-keep_fitting(_, _, [], []).
+keep_fitting(_, _, [], []) :- !.
 keep_fitting(Max, Cur, [K-V|Rst], [K-V|FitRest]) :-
     write_length(K, Kl, []), write_length(V, Vl, []),
     S #= Kl + Vl + 32, % "size" = # of bytes + 32 for some reason
     NewCur #= Cur + S,
-    NewCur #=< Max,
+    NewCur #=< Max, !,
     keep_fitting(Max, NewCur, Rst, FitRest).
 keep_fitting(_, _, _, []).
 
