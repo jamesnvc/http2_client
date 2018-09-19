@@ -1,1 +1,2 @@
 *.pl linguist-language=Prolog gitlab-language=prolog
+*.plt linguist-language=Prolog gitlab-language=prolog
