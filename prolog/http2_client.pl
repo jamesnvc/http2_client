@@ -6,8 +6,6 @@
 @author James Cash
 */
 
-:- license(bsd).
-
 :- use_module(library(predicate_options)).
 :- use_module(library(ssl), [ssl_context/3,
                              ssl_negotiate/5,
