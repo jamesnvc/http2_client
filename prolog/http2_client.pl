@@ -130,6 +130,9 @@ http2_request(Ctx, Headers, Body, ResponseCb) :-
 
 listen_socket(State0) :-
     http2_state_stream(State0, Stream),
+    stream_to_lazy_list(Stream, StreamList),
+    listen_socket(State0, StreamList).
+listen_socket(State0, StreamList0) :-
     thread_self(ThreadId),
     (thread_get_message(ThreadId, Msg, [timeout(0)])
     -> (debug(http2_client(request), "Client msg ~k", [Msg]),
@@ -139,14 +142,13 @@ listen_socket(State0) :-
 
     http2_state_stream(State1, Stream),
     tcp_select([Stream], Input, 0),
-    (Input = [Stream]
-    -> (fill_buffer(Stream),
-        read_pending_codes(Stream, Codes, Tail),
-        Tail = [],
-        read_frames(Codes, State1, State2))
-    ; State1 = State2),
+    (( Input = [Stream] ; \+ attvar(StreamList0) )
+    -> (debug(http2_client(response), "Data available", []),
+        read_frame(State1, StreamList0, State2, StreamList1),
+        debug(http2_client(response), "Read data, rest ~w", [StreamList1]))
+    ; (State1 = State2, StreamList1 = StreamList0)),
 
-    listen_socket(State2).
+    listen_socket(State2, StreamList1).
 
 worker_shutdown(State, Cause) :-
     http2_state_stream(State, Stream),
@@ -158,13 +160,6 @@ worker_shutdown(State, Cause) :-
     call(CloseCb, _{last_stream_id: LastStreamId,
                     cause: Cause}),
     throw(finished).
-
-read_frames([], State, State) :- !.
-read_frames(Codes, State0, State2) :-
-    read_frame(State0, Codes, State1, Rest), !,
-    debug(http2_client(response), "read frame, rest ~w", [Rest]),
-    read_frames(Rest, State1, State2).
-read_frames(_, State, State).
 
 % Worker thread - sending requests
 
