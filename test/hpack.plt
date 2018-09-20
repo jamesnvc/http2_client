@@ -244,4 +244,20 @@ test('Decoding response with Huffman') :-
         date-'Mon, 21 Oct 2013 20:13:22 GMT'
     ].
 
+test('Request with without indexed headers') :-
+    Headers = [literal_without(':path'-'/sample/path')],
+    phrase(hpack(4096-[]-Out, Headers), Bytes),
+    ground(Out), ground(Bytes),
+    Out = [],
+    hex_bytes(Hex, Bytes),
+    Hex='040c2f73616d706c652f70617468'.
+
+test('Request with without indexed headers unpack') :-
+    Hex='040c2f73616d706c652f70617468',
+    hex_bytes(Hex, Bytes),
+    phrase(hpack(4096-[]-Out, Headers), Bytes),
+    ground(Out), ground(Headers),
+    Out = [],
+    Headers = [literal_without(':path'-'/sample/path')].
+
 :- end_tests(hpack).
