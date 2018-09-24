@@ -99,12 +99,20 @@ http2_open(URL, Http2Ctx, Options) :-
                       stream(Stream),
                       close_cb(CloseCb)],
                      State),
-    thread_create(listen_socket(State), WorkerThreadId, [at_exit(warn_worker_died)]),
+    thread_create(listen_socket(State), WorkerThreadId, [at_exit(warn_worker_died(Stream, CloseCb))]),
     make_http2_ctx([stream(Stream), worker_thread_id(WorkerThreadId)],
                    Http2Ctx).
 
-warn_worker_died :-
-    print_message(warning, worker_died).
+warn_worker_died(Stream, CloseCb) :-
+    thread_self(ThreadId),
+    (thread_property(ThreadId, status(exception(finished)))
+    -> debug(http2_client(open), "Worker thread exited normally", [])
+    ;  (print_message(warning, worker_died),
+        close(Stream),
+        thread_property(ThreadId, status(Status)),
+        call(CloseCb, _{cause: Status,
+                        msg: "Worker thread died"}))).
+
 
 %! http2_close(+Ctx) is det.
 %  Close the given stream.
