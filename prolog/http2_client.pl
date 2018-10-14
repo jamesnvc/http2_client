@@ -7,6 +7,7 @@
 */
 
 :- use_module(library(predicate_options)).
+:- use_module(library(list_util), [split_at/4]).
 :- use_module(library(ssl), [ssl_context/3,
                              ssl_negotiate/5,
                              cert_accept_any/5]).
@@ -212,12 +213,23 @@ send_request_headers(Headers_, Ident, EndStream, State0, State1) :-
 
 send_request_body([], _, State, State) :- !.
 send_request_body(Body, Ident, State0, State0) :-
-    % TODO: check size of data frame, possible break it up
-    % TODO: make end_stream configurable? If wanting to do streaming
+    % [TODO] make end_stream configurable? If wanting to do streaming
     % or something?
     http2_state_stream(State0, Stream),
+    http2_state_settings(State0, Settings),
+    MaxSize = Settings.max_frame_size,
+    send_body_parts(Stream, Ident, MaxSize, Body).
+
+send_body_parts(_, _, _, []) :- !.
+send_body_parts(Stream, Ident, MaxSize, Body) :-
+    length(Body, BodyL),
+    BodyL =< MaxSize, !,
     send_frame(Stream,
               data_frame(Ident, Body, [end_stream(true)])).
+send_body_parts(Stream, Ident, MaxSize, Body) :-
+    split_at(MaxSize, Body, ToSend, Rest),
+    send_frame(Stream, data_frame(Ident, ToSend, [])),
+    send_body_parts(Stream, Ident, MaxSize, Rest).
 
 wrapped_headers(_, [], []) :- !.
 wrapped_headers(Table, [K-V|RestH], [indexed(K-V)|RestW]) :-
