@@ -1,4 +1,4 @@
-:- module(hpack, [hpack//2,
+:- module(hpack, [hpack/7,
                   lookup_header/3]).
 /** <module> HPACK, library for parsing RFC 7541 HPACK headers
 
@@ -75,6 +75,9 @@ edcg:acc_info(table_size, NewSize, _In, NewSize, true).
 edcg:acc_info(table, Ts-(K-V), Dt0, Dt1, insert_header(Ts, Dt0, K-V, Dt1)).
 
 edcg:pred_info(literal_header_inc_idx, 1, [table_size, table, dcg]).
+edcg:pred_info(hpack, 1, [table_size, table, dcg]).
+edcg:pred_info(dynamic_size_update, 0, [table_size, table, dcg]).
+edcg:pred_info(header, 1, [table_size, table, dcg]).
 
 indexed_header(K-V, Dt) -->
     { when(ground(K-V);ground(Idx), lookup_header(Dt, K-V, Idx)) },
@@ -131,14 +134,21 @@ keep_fitting(Max, Cur, [K-V|Rst], [K-V|FitRest]) :-
     keep_fitting(Max, NewCur, Rst, FitRest).
 keep_fitting(_, _, _, []).
 
-dynamic_size_update(DT0-DT1, NewSize) -->
-    int(1, 3, NewSize),
-    { keep_fitting(NewSize, DT0, DT1) }.
+dynamic_size_update -->>
+    int(1, 3, NewSize):dcg,
+    [NewSize]:table_size,
+    /(DT0, table),
+    { keep_fitting(NewSize, DT0, DT1) },
+    /(table, DT1).
 
-header(_-DT0-DT0, indexed(H)) --> indexed_header(H, DT0).
-header(Ts-DT0-DT1, literal_inc(H)) --> literal_header_inc_idx(H, Ts, Ts, DT0, DT1).
-header(_-DT0-DT0, literal_without(H)) --> literal_header_wo_idx(H, DT0).
-header(_-DT0-DT0, literal_never(H)) --> literal_header_never_idx(H, DT0).
+header(indexed(H)) -->>
+    /(DT0, table), indexed_header(H, DT0):dcg.
+header(literal_inc(H)) -->> literal_header_inc_idx(H).
+header(literal_without(H)) -->>
+    /(DT0, table), literal_header_wo_idx(H, DT0):dcg.
+header(literal_never(H)) -->>
+    /(DT0, table), literal_header_never_idx(H, DT0):dcg.
+
 
 %! hpack(?Tables, ?Headers:list)//
 %  DCG for recognizing an HPACK header.
@@ -155,6 +165,6 @@ header(_-DT0-DT0, literal_never(H)) --> literal_header_never_idx(H, DT0).
 %  @tbd Make headers more ergonomic -- maybe not wrapped in a functor
 %        indicating the mode, but not sure how else to allow control of
 %        what's indexed & what isn't?
-hpack(Ts-DT0-DTn, [Header|Headers]) -->
-    header(Ts-DT0-DT1, Header), !, hpack(Ts-DT1-DTn, Headers).
-hpack(_-DT0-DT0, []) --> [].
+hpack([Header|Headers]) -->>
+    header(Header), !, hpack(Headers).
+hpack([]) -->> [].
