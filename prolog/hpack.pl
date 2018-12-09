@@ -70,7 +70,7 @@ huffstr(S) --> % Huffman-encoded string
 
 % Encoding headers
 
-:- op(0, fx, table).
+:- op(0, fx, table). % undefine table operator to make =table= acc work
 edcg:acc_info(table_size, NewSize, _In, NewSize, true).
 edcg:acc_info(table, Ts-(K-V), Dt0, Dt1, insert_header(Ts, Dt0, K-V, Dt1)).
 
