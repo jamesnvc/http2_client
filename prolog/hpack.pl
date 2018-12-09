@@ -10,6 +10,7 @@
 :- use_module(library(when), [when/2]).
 :- use_module(library(delay), [delay/1]).
 :- use_module(library(list_util), [take/3]).
+:- use_module(library(edcg)).
 
 :- use_module(hpack/static_headers, [static_header/2]).
 :- use_module(hpack/huffman, [atom_huffcodes/2]).
@@ -69,18 +70,26 @@ huffstr(S) --> % Huffman-encoded string
 
 % Encoding headers
 
+:- op(0, fx, table).
+edcg:acc_info(table_size, NewSize, _In, NewSize, true).
+edcg:acc_info(table, Ts-(K-V), Dt0, Dt1, insert_header(Ts, Dt0, K-V, Dt1)).
+
+edcg:pred_info(literal_header_inc_idx, 1, [table_size, table, dcg]).
+
 indexed_header(Dt, K-V) -->
     { when(ground(K-V);ground(Idx), lookup_header(Dt, K-V, Idx)) },
     int(1, 1, Idx), !.
 
-literal_header_inc_idx(Ts-Dt0-Dt1, K-V) -->
+literal_header_inc_idx(K-V) -->>
+    /(Ts, table_size), /(Dt0, table),
     { when(ground(K-V);ground(KeyIdx), lookup_header(Dt0, K-_, KeyIdx)),
-      KeyIdx #> 0,
-      insert_header(Ts, Dt0, K-V, Dt1) },
-    int(1, 2, KeyIdx), str(V), !.
-literal_header_inc_idx(Ts-Dt0-Dt1, K-V) -->
-    { insert_header(Ts, Dt0, K-V, Dt1) },
-    int(1, 2, 0), str(K), str(V), !.
+      KeyIdx #> 0 },
+    [Ts-(K-V)]:table,
+    int(1, 2, KeyIdx):dcg, str(V):dcg, !.
+literal_header_inc_idx(K-V) -->>
+    /(Ts, table_size),
+    [Ts-(K-V)]:table,
+    int(1, 2, 0):dcg, str(K):dcg, str(V):dcg, !.
 
 literal_header_wo_idx(Dt, K-V) -->
     { when(ground(K-V);ground(KeyIdx), lookup_header(Dt, K-_, KeyIdx)),
@@ -127,7 +136,7 @@ dynamic_size_update(DT0-DT1, NewSize) -->
     { keep_fitting(NewSize, DT0, DT1) }.
 
 header(_-DT0-DT0, indexed(H)) --> indexed_header(DT0, H).
-header(Ts-DT0-DT1, literal_inc(H)) --> literal_header_inc_idx(Ts-DT0-DT1, H).
+header(Ts-DT0-DT1, literal_inc(H)) --> literal_header_inc_idx(H, Ts, Ts, DT0, DT1).
 header(_-DT0-DT0, literal_without(H)) --> literal_header_wo_idx(DT0, H).
 header(_-DT0-DT0, literal_never(H)) --> literal_header_never_idx(DT0, H).
 

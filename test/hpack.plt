@@ -8,16 +8,18 @@
 % https://httpwg.org/specs/rfc7541.html#header.field.representation.examples
 
 test('Literal header inc index new key') :-
-    phrase(hpack:literal_header_inc_idx(4096-[]-_, 'custom-key'-'custom-header'),
+    phrase(hpack:literal_header_inc_idx('custom-key'-'custom-header', 4096, _, [], _),
            Bytes),
+    ground(Bytes),
     hex_bytes(Hex, Bytes),
     Hex = '400a637573746f6d2d6b65790d637573746f6d2d686561646572'.
 
 test('Parse literal header inc index new key') :-
     Hex = '400a637573746f6d2d6b65790d637573746f6d2d686561646572',
     hex_bytes(Hex, Bytes),
-    phrase(hpack:literal_header_inc_idx(4096-[]-Table, Header),
+    phrase(hpack:literal_header_inc_idx(Header, 4096, _, [], Table),
            Bytes),
+    ground(Header), ground(Table),
     Header = 'custom-key'-'custom-header',
     Table = ['custom-key'-'custom-header'].
 

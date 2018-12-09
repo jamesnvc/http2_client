@@ -7,3 +7,4 @@ download('https://github.com/jamesnvc/http2_client/releases/*.zip').
 provides(http2_client).
 requires(list_util).
 requires(delay).
+requires(edcg).
