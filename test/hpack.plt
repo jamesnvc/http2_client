@@ -24,7 +24,7 @@ test('Parse literal header inc index new key') :-
     Table = ['custom-key'-'custom-header'].
 
 test('Literal field w/o indexing') :-
-    phrase(hpack:literal_header_wo_idx([], ':path'-'/sample/path'),
+    phrase(hpack:literal_header_wo_idx(':path'-'/sample/path', []),
            Bytes),
     hex_bytes(Hex, Bytes),
     Hex = '040c2f73616d706c652f70617468'.
@@ -32,23 +32,23 @@ test('Literal field w/o indexing') :-
 test('Parse literal field w/o indexing') :-
     Hex = '040c2f73616d706c652f70617468',
     hex_bytes(Hex, Bytes),
-    phrase(hpack:literal_header_wo_idx([], Header), Bytes),
+    phrase(hpack:literal_header_wo_idx(Header, []), Bytes),
     Header = ':path'-'/sample/path'.
 
 test('Parse literal field w/o indexing for new field') :-
     Bytes = [0,11,99,117,115,116,111,109,45,110,97,109,101,12,99,117,115,116,111,
              109,45,118,97,108,117,101],
-    phrase(hpack:literal_header_wo_idx([], Header), Bytes),
+    phrase(hpack:literal_header_wo_idx(Header, []), Bytes),
     Header = 'custom-name'-'custom-value'.
 
 test('Literal field never indexed') :-
-    phrase(hpack:literal_header_never_idx([], 'password'-'secret'),
+    phrase(hpack:literal_header_never_idx('password'-'secret', []),
            Bytes),
     hex_bytes(Hex, Bytes),
     Hex = '100870617373776f726406736563726574'.
 
 test('Indexed header') :-
-    phrase(hpack:indexed_header([], ':method'-'GET'), Bytes),
+    phrase(hpack:indexed_header(':method'-'GET', []), Bytes),
     hex_bytes(Hex, Bytes),
     Hex = '82'.
 

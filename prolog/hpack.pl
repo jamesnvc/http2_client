@@ -76,7 +76,7 @@ edcg:acc_info(table, Ts-(K-V), Dt0, Dt1, insert_header(Ts, Dt0, K-V, Dt1)).
 
 edcg:pred_info(literal_header_inc_idx, 1, [table_size, table, dcg]).
 
-indexed_header(Dt, K-V) -->
+indexed_header(K-V, Dt) -->
     { when(ground(K-V);ground(Idx), lookup_header(Dt, K-V, Idx)) },
     int(1, 1, Idx), !.
 
@@ -91,17 +91,17 @@ literal_header_inc_idx(K-V) -->>
     [Ts-(K-V)]:table,
     int(1, 2, 0):dcg, str(K):dcg, str(V):dcg, !.
 
-literal_header_wo_idx(Dt, K-V) -->
+literal_header_wo_idx(K-V, Dt) -->
     { when(ground(K-V);ground(KeyIdx), lookup_header(Dt, K-_, KeyIdx)),
       KeyIdx #> 0 },
     int(0, 4, KeyIdx), str(V), !.
-literal_header_wo_idx(_, K-V) -->
+literal_header_wo_idx(K-V, _) -->
     int(0, 4, 0), str(K), str(V), !.
 
-literal_header_never_idx(Dt, K-V) -->
+literal_header_never_idx(K-V, Dt) -->
     { when(ground(K-V);ground(KeyIdx), lookup_header(Dt, K-_, KeyIdx)) },
     int(1, 4, KeyIdx), str(V), !.
-literal_header_never_idx(_, K-V) -->
+literal_header_never_idx(K-V, _) -->
     int(1, 4, 0), str(K), str(V), !.
 
 % Header lookups
@@ -135,10 +135,10 @@ dynamic_size_update(DT0-DT1, NewSize) -->
     int(1, 3, NewSize),
     { keep_fitting(NewSize, DT0, DT1) }.
 
-header(_-DT0-DT0, indexed(H)) --> indexed_header(DT0, H).
+header(_-DT0-DT0, indexed(H)) --> indexed_header(H, DT0).
 header(Ts-DT0-DT1, literal_inc(H)) --> literal_header_inc_idx(H, Ts, Ts, DT0, DT1).
-header(_-DT0-DT0, literal_without(H)) --> literal_header_wo_idx(DT0, H).
-header(_-DT0-DT0, literal_never(H)) --> literal_header_never_idx(DT0, H).
+header(_-DT0-DT0, literal_without(H)) --> literal_header_wo_idx(H, DT0).
+header(_-DT0-DT0, literal_never(H)) --> literal_header_never_idx(H, DT0).
 
 %! hpack(?Tables, ?Headers:list)//
 %  DCG for recognizing an HPACK header.
