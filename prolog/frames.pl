@@ -20,7 +20,7 @@
 :- use_module(library(predicate_options)).
 :- use_module(library(delay), [delay/1]).
 :- use_module(library(list_util), [replicate/3]).
-:- use_module(hpack, [hpack//2]).
+:- use_module(hpack, [hpack/7]).
 :- use_module(reif).
 
 /*
@@ -133,7 +133,7 @@ data_frame(StreamIdent, Data, Options) -->
 %  DCG for an HTTP/2 header frame.
 %
 %  @arg TableSizeInOut Header table configuration information that is
-%        passed to the hpack:hpack//2 DCG.
+%        passed to the hpack:hpack/7 DCG.
 %  @arg Options Allowed options:
 %        * padded(PadLength)
 %          If non-zero, the stream will be padded with that many zero bytes.
@@ -143,7 +143,7 @@ data_frame(StreamIdent, Data, Options) -->
 %          If true, this frame indicates the end of the headers
 %        * priority(Priority)
 %          If true, this frame has priority set.
-%  @see hpack:hpack//2
+%  @see hpack:hpack/7
 %  @bug Technically, I think having a padding of zero is allowed, but
 %        currently that isn't representable
 %  @tbd Support for stream-priority flag
@@ -164,7 +164,7 @@ header_frame(StreamIdent, Headers, Size-Table0-Table1, Options) -->
       % to know the length of the output & I'm not sure how else to do
       % this
       when(nonvar(Headers);ground(Data),
-           phrase(hpack(Size-Table0-Table1, Headers), Data)),
+           phrase(hpack(Headers, Size, Size, Table0, Table1), Data)),
 
       DataLength #>= 0,
       delay(length(Data, DataLength)),
@@ -288,17 +288,17 @@ settings_ack_frame -->
 %  DCG for a push-promise frame, which is a frame notifying the
 %  receiver about a new stream the sender intends to initiate.
 %
-%  @arg HeaderInfo Information to be passed to hpack:hpack//2, in the
+%  @arg HeaderInfo Information to be passed to hpack:hpack/7, in the
 %        form =|TableSizeInOut-HeadersList|=
 %  @arg Options Options list:
 %        * padded(PadLength)
 %           If non-zero, the data will be padded by the indicated number of zero bytes
 %        * end_headers(End)
 %           If true, this frame is the end of the stream
-%  @see hpack:hpack//2
+%  @see hpack:hpack/7
 %  @bug Technically, I think having a padding of zero is allowed, but
 %        currently that isn't representable
-push_promise_frame(StreamIdent, NewStreamIdent, HeaderTableInfo-Headers, Options) -->
+push_promise_frame(StreamIdent, NewStreamIdent, (Size-Tbl0-Tbl1)-Headers, Options) -->
     int24(Length), [0x5],
     { make_push_promise_opts(Options, Opts),
       push_promise_opts_padded(Opts, PadLen),
@@ -310,7 +310,7 @@ push_promise_frame(StreamIdent, NewStreamIdent, HeaderTableInfo-Headers, Options
       % As noted in header_frame//4, it would be nice if we could do
       % this in a better way...
       when(nonvar(Headers);ground(Data),
-           phrase(hpack(HeaderTableInfo, Headers), Data)),
+           phrase(hpack(Headers, Size, Size, Tbl0, Tbl1), Data)),
 
       delay(length(Data, DataLength)),
       zcompare(Comp, PadLen, 0),
@@ -379,12 +379,12 @@ window_update_frame(StreamIdent, Increment) -->
  +---------------------------------------------------------------+
 */
 %! continuation_frame(?StreamIdent:integer, ?HeaderInfo, ?End:boolean)//
-%  @arg HeaderInfo Information to be passed to hpack:hpack//2
+%  @arg HeaderInfo Information to be passed to hpack:hpack/7
 %        =| HeaderInfo = HeaderTableSize-TableIn-TableOut-HeaderList |=
-continuation_frame(StreamIdent, HeaderTableInfo-Headers, End) -->
+continuation_frame(StreamIdent, (Size-Tbl0-Tbl1)-Headers, End) -->
     int24(Length), [0x9],
     { when(nonvar(Headers);ground(Data),
-           phrase(hpack(HeaderTableInfo, Headers), Data)),
+           phrase(hpack(Headers, Size, Size, Tbl0, Tbl1), Data)),
       delay(length(Data, Length)),
       if_(End = true, Flags #= 0x4,
           (End = false, Flags #= 0x0)) },
