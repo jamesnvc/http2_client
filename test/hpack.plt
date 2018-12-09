@@ -262,4 +262,30 @@ test('Request with without indexed headers unpack') :-
     Out = [],
     Headers = [literal_without(':path'-'/sample/path')].
 
+test('Can encode dynamic change of the header table size') :-
+    Headers = [indexed(':method'-'GET'),
+               indexed(':scheme'-'http'),
+               size_update(256),
+               indexed(':path'-'/'),
+               literal_inc(':authority'-'www.example.com')],
+    phrase(hpack(Headers, 0, Size, [], DynTable), Bytes),
+    hex_bytes(Hex, Bytes),
+    Hex = '82863fe184410f7777772e6578616d706c652e636f6d',
+    DynTable = [':authority'-'www.example.com'],
+    Size = 256.
+
+test('Can decode dynamic change of the header table size') :-
+    Hex = '82863fe184410f7777772e6578616d706c652e636f6d',
+    hex_bytes(Hex, Bytes),
+    phrase(hpack(Headers, 0, Size, [], DynTable), Bytes),
+    ground(Headers), ground(DynTable), ground(Size),
+    Headers = [indexed(':method'-'GET'),
+               indexed(':scheme'-'http'),
+               size_update(256),
+               indexed(':path'-'/'),
+               literal_inc(':authority'-'www.example.com')],
+    DynTable = [':authority'-'www.example.com'],
+    Size = 256.
+
+
 :- end_tests(hpack).

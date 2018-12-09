@@ -76,7 +76,7 @@ edcg:acc_info(table, Ts-(K-V), Dt0, Dt1, insert_header(Ts, Dt0, K-V, Dt1)).
 
 edcg:pred_info(literal_header_inc_idx, 1, [table_size, table, dcg]).
 edcg:pred_info(hpack, 1, [table_size, table, dcg]).
-edcg:pred_info(dynamic_size_update, 0, [table_size, table, dcg]).
+edcg:pred_info(dynamic_size_update, 1, [table_size, table, dcg]).
 edcg:pred_info(header, 1, [table_size, table, dcg]).
 
 indexed_header(K-V, Dt) -->
@@ -134,7 +134,7 @@ keep_fitting(Max, Cur, [K-V|Rst], [K-V|FitRest]) :-
     keep_fitting(Max, NewCur, Rst, FitRest).
 keep_fitting(_, _, _, []).
 
-dynamic_size_update -->>
+dynamic_size_update(NewSize) -->>
     int(1, 3, NewSize):dcg,
     [NewSize]:table_size,
     /(DT0, table),
@@ -148,6 +148,7 @@ header(literal_without(H)) -->>
     /(DT0, table), literal_header_wo_idx(H, DT0):dcg.
 header(literal_never(H)) -->>
     /(DT0, table), literal_header_never_idx(H, DT0):dcg.
+header(size_update(Size)) -->> dynamic_size_update(Size).
 
 
 %! hpack(?Tables, ?Headers:list)//
