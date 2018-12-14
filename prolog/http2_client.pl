@@ -209,7 +209,10 @@ send_request_headers(Headers_, Ident, EndStream, State0, State1) :-
                header_frame(Ident, Headers, TableSize-Table0-TableSize1-Table1,
                             [end_headers(true), end_stream(EndStream)])),
     debug(http2_client(request), "Sent headers", []),
-    set_send_header_table_of_http2_state(Table1, State0, State1).
+    set_http2_state_fields(
+        [send_header_table(Table1),
+         send_header_table_size(TableSize1)],
+        State0, State1).
 
 send_request_body([], _, State, State) :- !.
 send_request_body(Body, Ident, State0, State0) :-
@@ -287,7 +290,9 @@ handle_frame(0x1, Ident, State0, In, State3) :- % headers frame
                              headers(NewHeaders)],
                             StreamInfo, StreamInfo1),
     update_state_substream(Ident, StreamInfo1, State0, State1),
-    set_recv_header_table_of_http2_state(HeaderTable1, State1, State2),
+    set_http2_state_fields([recv_header_table(HeaderTable1),
+                            recv_header_table_size(TableSize1)],
+                           State1, State2),
     ((EndStream, EndHeaders)
     -> complete_client(Ident, State2, State3)
     ;  State3 = State2).
