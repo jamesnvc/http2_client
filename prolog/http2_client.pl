@@ -206,10 +206,13 @@ send_request_headers(Headers_, Ident, EndStream, State0, State1) :-
     % TODO: check size of header frame & split into header +
     % continuation if too large
     send_frame(Stream,
-               header_frame(Ident, Headers, TableSize-Table0-Table1,
+               header_frame(Ident, Headers, TableSize-Table0-TableSize1-Table1,
                             [end_headers(true), end_stream(EndStream)])),
     debug(http2_client(request), "Sent headers", []),
-    set_send_header_table_of_http2_state(Table1, State0, State1).
+    set_http2_state_fields(
+        [send_header_table(Table1),
+         send_header_table_size(TableSize1)],
+        State0, State1).
 
 send_request_body([], _, State, State) :- !.
 send_request_body(Body, Ident, State0, State0) :-
@@ -273,7 +276,7 @@ handle_frame(0x1, Ident, State0, In, State3) :- % headers frame
     http2_state_recv_header_table_size(State0, TableSize),
     phrase(header_frame(Ident,
                         Headers,
-                        TableSize-HeaderTable0-HeaderTable1,
+                        TableSize-HeaderTable0-TableSize1-HeaderTable1,
                         % Ignoring priority
                         [end_stream(EndStream),
                          end_headers(EndHeaders)]),
@@ -287,7 +290,9 @@ handle_frame(0x1, Ident, State0, In, State3) :- % headers frame
                              headers(NewHeaders)],
                             StreamInfo, StreamInfo1),
     update_state_substream(Ident, StreamInfo1, State0, State1),
-    set_recv_header_table_of_http2_state(HeaderTable1, State1, State2),
+    set_http2_state_fields([recv_header_table(HeaderTable1),
+                            recv_header_table_size(TableSize1)],
+                           State1, State2),
     ((EndStream, EndHeaders)
     -> complete_client(Ident, State2, State3)
     ;  State3 = State2).
@@ -321,7 +326,7 @@ handle_frame(0x4, _, State0, In, State1) :- % settings frame
 handle_frame(0x5, Ident, State0, In, State2) :- % push promise frame
     http2_state_recv_header_table(State0, TableIn),
     http2_state_recv_header_table_size(State0, TableSize),
-    phrase(push_promise_frame(Ident, NewIdent, TableSize-TableIn-TableOut-Headers,
+    phrase(push_promise_frame(Ident, NewIdent, TableSize-TableIn-TableSizeOut-TableOut-Headers,
                               [end_headers(_EndHeaders)]),
           In), !,
     debug(http2_client(response), "Push promise Stream ~w headers ~w", [NewIdent, Headers]),
@@ -333,7 +338,8 @@ handle_frame(0x5, Ident, State0, In, State2) :- % push promise frame
     http2_state_last_stream_id(State1, LastStreamId),
     NewLastId is max(LastStreamId, NewIdent),
     set_http2_state_fields([last_stream_id(NewLastId),
-                            recv_header_table(TableOut)],
+                            recv_header_table(TableOut),
+                            recv_header_table_size(TableSizeOut)],
                            State1, State2).
 handle_frame(0x6, _, State, In, State) :- % ping frame
     phrase(ping_frame(_, Ack), In), !,
@@ -356,7 +362,7 @@ handle_frame(0x9, Ident, State0, In, State3) :- % continuation frame
     http2_state_recv_header_table(State0, HeaderTable0),
     http2_state_recv_header_table_size(State0, TableSize),
     phrase(continuation_frame(Ident,
-                              TableSize-HeaderTable0-HeaderTable1-Headers,
+                              TableSize-HeaderTable0-TableSizeOut-HeaderTable1-Headers,
                               EndHeaders),
           In),
     stream_info(State0, Ident, StreamInfo),
@@ -366,7 +372,9 @@ handle_frame(0x9, Ident, State0, In, State3) :- % continuation frame
     % previous header frame was end-of-stream but not end-of-headers)
     set_headers_of_http2_stream(NewHeaders, StreamInfo, StreamInfo1),
     update_state_substream(Ident, StreamInfo1, State0, State1),
-    set_recv_header_table_of_http2_state(HeaderTable1, State1, State2),
+    set_http2_state_fields([recv_header_table(HeaderTable1),
+                            recv_header_table_size(TableSizeOut)],
+                           State1, State2),
     http2_stream_done(StreamInfo1, StreamDone),
     ((StreamDone, EndHeaders)
     -> complete_client(Ident, State2, State3)

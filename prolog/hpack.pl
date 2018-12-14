@@ -1,4 +1,4 @@
-:- module(hpack, [hpack//2,
+:- module(hpack, [hpack/7,
                   lookup_header/3]).
 /** <module> HPACK, library for parsing RFC 7541 HPACK headers
 
@@ -10,6 +10,7 @@
 :- use_module(library(when), [when/2]).
 :- use_module(library(delay), [delay/1]).
 :- use_module(library(list_util), [take/3]).
+:- use_module(library(edcg)).
 
 :- use_module(hpack/static_headers, [static_header/2]).
 :- use_module(hpack/huffman, [atom_huffcodes/2]).
@@ -69,30 +70,41 @@ huffstr(S) --> % Huffman-encoded string
 
 % Encoding headers
 
-indexed_header(Dt, K-V) -->
+:- op(0, fx, table). % undefine table operator to make =table= acc work
+edcg:acc_info(table_size, NewSize, _In, NewSize, true).
+edcg:acc_info(table, Ts-(K-V), Dt0, Dt1, insert_header(Ts, Dt0, K-V, Dt1)).
+
+edcg:pred_info(literal_header_inc_idx, 1, [table_size, table, dcg]).
+edcg:pred_info(hpack, 1, [table_size, table, dcg]).
+edcg:pred_info(dynamic_size_update, 1, [table_size, table, dcg]).
+edcg:pred_info(header, 1, [table_size, table, dcg]).
+
+indexed_header(K-V, Dt) -->
     { when(ground(K-V);ground(Idx), lookup_header(Dt, K-V, Idx)) },
     int(1, 1, Idx), !.
 
-literal_header_inc_idx(Ts-Dt0-Dt1, K-V) -->
+literal_header_inc_idx(K-V) -->>
+    /(Ts, table_size), /(Dt0, table),
     { when(ground(K-V);ground(KeyIdx), lookup_header(Dt0, K-_, KeyIdx)),
-      KeyIdx #> 0,
-      insert_header(Ts, Dt0, K-V, Dt1) },
-    int(1, 2, KeyIdx), str(V), !.
-literal_header_inc_idx(Ts-Dt0-Dt1, K-V) -->
-    { insert_header(Ts, Dt0, K-V, Dt1) },
-    int(1, 2, 0), str(K), str(V), !.
+      KeyIdx #> 0 },
+    [Ts-(K-V)]:table,
+    int(1, 2, KeyIdx):dcg, str(V):dcg, !.
+literal_header_inc_idx(K-V) -->>
+    /(Ts, table_size),
+    [Ts-(K-V)]:table,
+    int(1, 2, 0):dcg, str(K):dcg, str(V):dcg, !.
 
-literal_header_wo_idx(Dt, K-V) -->
+literal_header_wo_idx(K-V, Dt) -->
     { when(ground(K-V);ground(KeyIdx), lookup_header(Dt, K-_, KeyIdx)),
       KeyIdx #> 0 },
     int(0, 4, KeyIdx), str(V), !.
-literal_header_wo_idx(_, K-V) -->
+literal_header_wo_idx(K-V, _) -->
     int(0, 4, 0), str(K), str(V), !.
 
-literal_header_never_idx(Dt, K-V) -->
+literal_header_never_idx(K-V, Dt) -->
     { when(ground(K-V);ground(KeyIdx), lookup_header(Dt, K-_, KeyIdx)) },
     int(1, 4, KeyIdx), str(V), !.
-literal_header_never_idx(_, K-V) -->
+literal_header_never_idx(K-V, _) -->
     int(1, 4, 0), str(K), str(V), !.
 
 % Header lookups
@@ -122,14 +134,22 @@ keep_fitting(Max, Cur, [K-V|Rst], [K-V|FitRest]) :-
     keep_fitting(Max, NewCur, Rst, FitRest).
 keep_fitting(_, _, _, []).
 
-dynamic_size_update(DT0-DT1, NewSize) -->
-    int(1, 3, NewSize),
-    { keep_fitting(NewSize, DT0, DT1) }.
+dynamic_size_update(NewSize) -->>
+    int(1, 3, NewSize):dcg,
+    [NewSize]:table_size,
+    /(DT0, table),
+    { keep_fitting(NewSize, DT0, DT1) },
+    /(table, DT1).
 
-header(_-DT0-DT0, indexed(H)) --> indexed_header(DT0, H).
-header(Ts-DT0-DT1, literal_inc(H)) --> literal_header_inc_idx(Ts-DT0-DT1, H).
-header(_-DT0-DT0, literal_without(H)) --> literal_header_wo_idx(DT0, H).
-header(_-DT0-DT0, literal_never(H)) --> literal_header_never_idx(DT0, H).
+header(indexed(H)) -->>
+    /(DT0, table), indexed_header(H, DT0):dcg.
+header(literal_inc(H)) -->> literal_header_inc_idx(H).
+header(literal_without(H)) -->>
+    /(DT0, table), literal_header_wo_idx(H, DT0):dcg.
+header(literal_never(H)) -->>
+    /(DT0, table), literal_header_never_idx(H, DT0):dcg.
+header(size_update(Size)) -->> dynamic_size_update(Size).
+
 
 %! hpack(?Tables, ?Headers:list)//
 %  DCG for recognizing an HPACK header.
@@ -146,6 +166,6 @@ header(_-DT0-DT0, literal_never(H)) --> literal_header_never_idx(DT0, H).
 %  @tbd Make headers more ergonomic -- maybe not wrapped in a functor
 %        indicating the mode, but not sure how else to allow control of
 %        what's indexed & what isn't?
-hpack(Ts-DT0-DTn, [Header|Headers]) -->
-    header(Ts-DT0-DT1, Header), !, hpack(Ts-DT1-DTn, Headers).
-hpack(_-DT0-DT0, []) --> [].
+hpack([Header|Headers]) -->>
+    header(Header), !, hpack(Headers).
+hpack([]) -->> [].
