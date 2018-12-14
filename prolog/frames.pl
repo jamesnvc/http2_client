@@ -381,10 +381,10 @@ window_update_frame(StreamIdent, Increment) -->
 %! continuation_frame(?StreamIdent:integer, ?HeaderInfo, ?End:boolean)//
 %  @arg HeaderInfo Information to be passed to hpack:hpack/7
 %        =| HeaderInfo = HeaderTableSize-TableIn-TableOut-HeaderList |=
-continuation_frame(StreamIdent, (Size-Tbl0-Tbl1)-Headers, End) -->
+continuation_frame(StreamIdent, (Size-Tbl0-SizeOut-Tbl1)-Headers, End) -->
     int24(Length), [0x9],
     { when(nonvar(Headers);ground(Data),
-           phrase(hpack(Headers, Size, Size, Tbl0, Tbl1), Data)),
+           phrase(hpack(Headers, Size, SizeOut, Tbl0, Tbl1), Data)),
       delay(length(Data, Length)),
       if_(End = true, Flags #= 0x4,
           (End = false, Flags #= 0x0)) },

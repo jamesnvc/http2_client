@@ -236,9 +236,9 @@ test('Unpack goaway frame') :-
     DebugData = `Some debug info`, true.
 
 test('Pack continuation frame') :-
-    Headers = 4096-[]-_Tbl-[indexed(':method'-'GET'),
-                            indexed(':path'-'/'),
-                            literal_inc('something'-'foobar')],
+    Headers = 4096-[]-4096-_Tbl-[indexed(':method'-'GET'),
+                                 indexed(':path'-'/'),
+                                 literal_inc('something'-'foobar')],
     phrase(continuation_frame(1234, Headers, false), Bytes),
     ground(Bytes),
     Bytes = [0,0,20,9,0,0,0,4,210,130,132,64,9,115,111,109,101,116,104,105,110,

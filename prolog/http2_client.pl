@@ -362,7 +362,7 @@ handle_frame(0x9, Ident, State0, In, State3) :- % continuation frame
     http2_state_recv_header_table(State0, HeaderTable0),
     http2_state_recv_header_table_size(State0, TableSize),
     phrase(continuation_frame(Ident,
-                              TableSize-HeaderTable0-HeaderTable1-Headers,
+                              TableSize-HeaderTable0-TableSizeOut-HeaderTable1-Headers,
                               EndHeaders),
           In),
     stream_info(State0, Ident, StreamInfo),
@@ -372,7 +372,9 @@ handle_frame(0x9, Ident, State0, In, State3) :- % continuation frame
     % previous header frame was end-of-stream but not end-of-headers)
     set_headers_of_http2_stream(NewHeaders, StreamInfo, StreamInfo1),
     update_state_substream(Ident, StreamInfo1, State0, State1),
-    set_recv_header_table_of_http2_state(HeaderTable1, State1, State2),
+    set_http2_state_fields([recv_header_table(HeaderTable1),
+                            recv_header_table_size(TableSizeOut)],
+                           State1, State2),
     http2_stream_done(StreamInfo1, StreamDone),
     ((StreamDone, EndHeaders)
     -> complete_client(Ident, State2, State3)
