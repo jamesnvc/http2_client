@@ -326,7 +326,7 @@ handle_frame(0x4, _, State0, In, State1) :- % settings frame
 handle_frame(0x5, Ident, State0, In, State2) :- % push promise frame
     http2_state_recv_header_table(State0, TableIn),
     http2_state_recv_header_table_size(State0, TableSize),
-    phrase(push_promise_frame(Ident, NewIdent, TableSize-TableIn-TableOut-Headers,
+    phrase(push_promise_frame(Ident, NewIdent, TableSize-TableIn-TableSizeOut-TableOut-Headers,
                               [end_headers(_EndHeaders)]),
           In), !,
     debug(http2_client(response), "Push promise Stream ~w headers ~w", [NewIdent, Headers]),
@@ -338,7 +338,8 @@ handle_frame(0x5, Ident, State0, In, State2) :- % push promise frame
     http2_state_last_stream_id(State1, LastStreamId),
     NewLastId is max(LastStreamId, NewIdent),
     set_http2_state_fields([last_stream_id(NewLastId),
-                            recv_header_table(TableOut)],
+                            recv_header_table(TableOut),
+                            recv_header_table_size(TableSizeOut)],
                            State1, State2).
 handle_frame(0x6, _, State, In, State) :- % ping frame
     phrase(ping_frame(_, Ack), In), !,

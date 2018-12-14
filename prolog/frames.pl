@@ -298,7 +298,7 @@ settings_ack_frame -->
 %  @see hpack:hpack/7
 %  @bug Technically, I think having a padding of zero is allowed, but
 %        currently that isn't representable
-push_promise_frame(StreamIdent, NewStreamIdent, (Size-Tbl0-Tbl1)-Headers, Options) -->
+push_promise_frame(StreamIdent, NewStreamIdent, (SizeIn-Tbl0-SizeOut-Tbl1)-Headers, Options) -->
     int24(Length), [0x5],
     { make_push_promise_opts(Options, Opts),
       push_promise_opts_padded(Opts, PadLen),
@@ -310,7 +310,7 @@ push_promise_frame(StreamIdent, NewStreamIdent, (Size-Tbl0-Tbl1)-Headers, Option
       % As noted in header_frame//4, it would be nice if we could do
       % this in a better way...
       when(nonvar(Headers);ground(Data),
-           phrase(hpack(Headers, Size, Size, Tbl0, Tbl1), Data)),
+           phrase(hpack(Headers, SizeIn, SizeOut, Tbl0, Tbl1), Data)),
 
       delay(length(Data, DataLength)),
       zcompare(Comp, PadLen, 0),

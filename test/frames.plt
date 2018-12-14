@@ -168,7 +168,7 @@ test('Settings ack') :-
     Bytes = [0, 0, 0, 4, 1, 0, 0, 0, 0].
 
 test('Pack push promise frame') :-
-    HeaderInfo = 4096-[]-_,
+    HeaderInfo = 4096-[]-_-_,
     Headers = [indexed(':method'-'GET'),
                indexed(':scheme'-https),
                indexed(':path'-'/')],
@@ -186,7 +186,7 @@ test('Unpack push promise frame') :-
     ground(PromisedStreamId),
     StreamId = 0,
     PromisedStreamId = 1234,
-    HeaderInfo = 4096-[]-_,
+    HeaderInfo = 4096-[]-4096-_,
     Headers = [indexed(':method'-'GET'),
                indexed(':scheme'-https),
                indexed(':path'-'/')],
@@ -201,7 +201,7 @@ test('Unpack push promise frame with opts') :-
            Bytes),
     StreamId = 0,
     PromisedStreamId = 1234,
-    HeaderInfo = 4096-[]-_,
+    HeaderInfo = 4096-[]-4096-_,
     Headers = [indexed(':method'-'GET'),
                indexed(':scheme'-https),
                indexed(':path'-'/')],
