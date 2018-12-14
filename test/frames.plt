@@ -50,7 +50,7 @@ test('Pack headers') :-
     Headers = [indexed(':method'-'GET'),
                indexed(':scheme'-'http'),
                indexed(':path'-'/')],
-    phrase(header_frame(12345, Headers, 4096-[]-_Table, []), Bytes),
+    phrase(header_frame(12345, Headers, 4096-[]-4096-_Table, []), Bytes),
     ground(Bytes),
     Bytes = [0,0,3,1,4,0,0,48,57,130,134,132].
 
@@ -58,7 +58,7 @@ test('Pack headers padding') :-
     Headers = [indexed(':method'-'GET'),
                indexed(':scheme'-'http'),
                indexed(':path'-'/')],
-    phrase(header_frame(12345, Headers, 4096-[]-_Table, [padded(7)]), Bytes),
+    phrase(header_frame(12345, Headers, 4096-[]-4096-_Table, [padded(7)]), Bytes),
     ground(Bytes),
     Bytes = [0,0,11,1,12,0,0,48,57,7,130,134,132,0,0,0,0,0,0,0].
 
@@ -66,7 +66,7 @@ test('Pack headers priority') :-
     Headers = [indexed(':method'-'GET'),
                indexed(':scheme'-'http'),
                indexed(':path'-'/')],
-    phrase(header_frame(12345, Headers, 4096-[]-_Table,
+    phrase(header_frame(12345, Headers, 4096-[]-4096-_Table,
                         [padded(7),
                          priority(true),
                          is_exclusive(false),
@@ -85,7 +85,7 @@ test('Pack headers priority') :-
 
 test('Unpack headers') :-
     Bytes = [0,0,3,1,4,0,0,48,57,130,134,132],
-    phrase(header_frame(Stream, Headers, 4096-[]-_Table,
+    phrase(header_frame(Stream, Headers, 4096-[]-4096-_Table,
                                      [end_headers(End),
                                       end_stream(EndS),
                                       padded(Padding),
@@ -101,7 +101,7 @@ test('Unpack headers') :-
 
 test('Unpack headers padding') :-
     Bytes = [0,0,11,1,12,0,0,48,57,7,130,134,132,0,0,0,0,0,0,0],
-    phrase(header_frame(12345, Headers, 4096-[]-_Table, [padded(Pad)]), Bytes),
+    phrase(header_frame(12345, Headers, 4096-[]-4096-_Table, [padded(Pad)]), Bytes),
     Headers = [indexed(':method'-'GET'),
                indexed(':scheme'-'http'),
                indexed(':path'-'/')],
@@ -116,7 +116,7 @@ test('Unpack headers priority') :-
              0, 0, 0, 0x50,
              69,
              130,134,132,0,0,0,0,0,0,0],
-    phrase(header_frame(Ident, Headers, 4096-[]-_Table,
+    phrase(header_frame(Ident, Headers, 4096-[]-4096-_Table,
                         [padded(Pad),
                          priority(Priority),
                          is_exclusive(Exclusive),
@@ -258,7 +258,7 @@ test('unpacking header') :-
               ':path'-'/resources/push.css',
               'user-agent'-'swi-prolog',
               ':authority'-'http2.akamai.com'],
-    phrase(header_frame(Ident, Headers, 4096-DTable-DTableOut, [padded(Pad),
+    phrase(header_frame(Ident, Headers, 4096-DTable-4096-DTableOut, [padded(Pad),
                                                                 end_stream(EndStream),
                                                                 end_headers(EndHeaders),
                                                                 priority(Priority)]),
@@ -301,5 +301,40 @@ test('unpacking header') :-
     EndStream = false,
     EndHeaders = true,
     Priority = false.
+
+test('pack header with size change') :-
+    phrase(header_frame(123,
+                        [indexed(':method'-'GET'),
+                         indexed(':scheme'-'http'),
+                         size_update(0),
+                         indexed(':path'-'/'),
+                         literal_inc(':authority'-'www.example.com')],
+                        4096-[]-SizeOut-TableOut,
+                        [padded(0),
+                         end_stream(true),
+                         end_headers(true)]),
+           Bytes),
+    ground(Bytes), ground(TableOut), ground(SizeOut),
+    TableOut = [], SizeOut = 0,
+    hex_bytes(Hex, Bytes),
+    Hex = '00001501050000007b82862084410f7777772e6578616d706c652e636f6d'.
+
+test('unpack header with size change') :-
+    Bytes = [0,0,21,1,5,0,0,0,123,130,134,32,132,65,15,119,119,119,46,101,120,97,109,112,108,101,46,99,111,109],
+    phrase(header_frame(Ident, Headers, 4096-[]-SizeOut-TableOut,
+                        [padded(Pad),
+                         end_stream(EndStream),
+                         end_headers(EndHeader)]),
+           Bytes),
+    maplist(ground, [Ident, Headers, SizeOut, TableOut, Pad, EndStream, EndHeader]),
+    Pad = 0,
+    EndStream = true,
+    EndHeader = true,
+    Headers = [indexed(':method'-'GET'),
+               indexed(':scheme'-'http'),
+               size_update(0),
+               indexed(':path'-'/'),
+               literal_inc(':authority'-'www.example.com')],
+    SizeOut = 0, TableOut = [].
 
 :- end_tests(frames).

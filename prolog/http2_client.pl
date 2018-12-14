@@ -206,7 +206,7 @@ send_request_headers(Headers_, Ident, EndStream, State0, State1) :-
     % TODO: check size of header frame & split into header +
     % continuation if too large
     send_frame(Stream,
-               header_frame(Ident, Headers, TableSize-Table0-Table1,
+               header_frame(Ident, Headers, TableSize-Table0-TableSize1-Table1,
                             [end_headers(true), end_stream(EndStream)])),
     debug(http2_client(request), "Sent headers", []),
     set_send_header_table_of_http2_state(Table1, State0, State1).
@@ -273,7 +273,7 @@ handle_frame(0x1, Ident, State0, In, State3) :- % headers frame
     http2_state_recv_header_table_size(State0, TableSize),
     phrase(header_frame(Ident,
                         Headers,
-                        TableSize-HeaderTable0-HeaderTable1,
+                        TableSize-HeaderTable0-TableSize1-HeaderTable1,
                         % Ignoring priority
                         [end_stream(EndStream),
                          end_headers(EndHeaders)]),

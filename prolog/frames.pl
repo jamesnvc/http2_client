@@ -149,7 +149,7 @@ data_frame(StreamIdent, Data, Options) -->
 %  @tbd Support for stream-priority flag
 %  @tbd Headers need to fit in a particular size, or needs to use
 %        CONTINUATION frames.
-header_frame(StreamIdent, Headers, Size-Table0-Table1, Options) -->
+header_frame(StreamIdent, Headers, Size-Table0-SizeOut-Table1, Options) -->
     int24(Length), [0x1],
     { make_header_opts(Options, Opts),
       header_opts_padded(Opts, PadLen),
@@ -164,7 +164,7 @@ header_frame(StreamIdent, Headers, Size-Table0-Table1, Options) -->
       % to know the length of the output & I'm not sure how else to do
       % this
       when(nonvar(Headers);ground(Data),
-           phrase(hpack(Headers, Size, Size, Table0, Table1), Data)),
+           phrase(hpack(Headers, Size, SizeOut, Table0, Table1), Data)),
 
       DataLength #>= 0,
       delay(length(Data, DataLength)),
