@@ -287,5 +287,28 @@ test('Can decode dynamic change of the header table size') :-
     DynTable = [':authority'-'www.example.com'],
     Size = 256.
 
+test('can generate hpack with a maximum length') :-
+    Headers = [indexed(':method'-'GET'),
+               indexed(':scheme'-'http'),
+               size_update(256),
+               indexed(':path'-'/'),
+               literal_inc(':authority'-'www.example.com')],
+    phrase(hpack:hpack_max(5, Headers, 0-[]-Size-Table, Leftover, 0),
+           Bytes),
+    Bytes = [130, 134, 63, 225, 132],
+    Leftover = [literal_inc(':authority'-'www.example.com')],
+    Size = 256, Table = [].
+
+test('can generate hpack with a maximum length 2') :-
+    Headers = [indexed(':method'-'GET'),
+               indexed(':scheme'-'http'),
+               size_update(256),
+               indexed(':path'-'/'),
+               literal_inc(':authority'-'www.example.com')],
+    phrase(hpack:hpack_max(200, Headers, 0-[]-Size-Table, Leftover, 0),
+           Bytes),
+    Bytes = [130,134,63,225,132,65,15,119,119,119,46,101,120,97,109,112,108,101,46,99,111,109],
+    Leftover = [],
+    Size = 256, Table = [':authority'-'www.example.com'].
 
 :- end_tests(hpack).
