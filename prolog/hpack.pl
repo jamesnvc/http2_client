@@ -173,7 +173,6 @@ hpack([]) -->> [].
 
 %! hpack_max(+MaxSize:integer, +Headers:list, ?TableInfo, -Leftover, -Size)//
 %  like hpack, but maintain a maximum size for the header tables
-hpack_max(_, [], S-T-S-T, [], _) --> !.
 hpack_max(Max, [Header|Headers], SizeIn-TableIn-SizeOut-TableOut, Leftover, BytesL) -->
     { phrase(hpack([Header], SizeIn, Size1, TableIn, Table1), HBs),
       length(HBs, HBL), NextL is BytesL + HBL,
