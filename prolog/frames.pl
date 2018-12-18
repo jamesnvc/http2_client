@@ -150,6 +150,16 @@ data_frame(StreamIdent, Data, Options) -->
 %  @tbd Headers need to fit in a particular size, or needs to use
 %        CONTINUATION frames.
 header_frame(StreamIdent, Headers, Size-Table0-SizeOut-Table1, Options) -->
+    { % dumb that we have to call phrase/2 inside a DCG, but we need
+      % to know the length of the output & I'm not sure how else to do
+      % this
+      when(nonvar(Headers);ground(Data),
+           phrase(hpack(Headers, Size, SizeOut, Table0, Table1), Data)) },
+    header_frame_raw(StreamIdent, Data, Options).
+
+%! header_frame_raw(?StreamIdent, ?HeaderData, ?Options)//
+%  Helper DCG to generate header frames, passing the HPACK'd data through
+header_frame_raw(StreamIdent, Data, Options) -->
     int24(Length), [0x1],
     { make_header_opts(Options, Opts),
       header_opts_padded(Opts, PadLen),
@@ -159,12 +169,6 @@ header_frame(StreamIdent, Headers, Size-Table0-SizeOut-Table1, Options) -->
       header_opts_is_exclusive(Opts, IsExclusive),
       header_opts_stream_dependency(Opts, StreamDep),
       header_opts_weight(Opts, Weight),
-
-      % dumb that we have to call phrase/2 inside a DCG, but we need
-      % to know the length of the output & I'm not sure how else to do
-      % this
-      when(nonvar(Headers);ground(Data),
-           phrase(hpack(Headers, Size, SizeOut, Table0, Table1), Data)),
 
       DataLength #>= 0,
       delay(length(Data, DataLength)),
@@ -382,14 +386,36 @@ window_update_frame(StreamIdent, Increment) -->
 %  @arg HeaderInfo Information to be passed to hpack:hpack/7
 %        =| HeaderInfo = HeaderTableSize-TableIn-TableOut-HeaderList |=
 continuation_frame(StreamIdent, (Size-Tbl0-SizeOut-Tbl1)-Headers, End) -->
-    int24(Length), [0x9],
     { when(nonvar(Headers);ground(Data),
-           phrase(hpack(Headers, Size, SizeOut, Tbl0, Tbl1), Data)),
-      delay(length(Data, Length)),
+           phrase(hpack(Headers, Size, SizeOut, Tbl0, Tbl1), Data)) },
+    continuation_frame_raw(StreamIdent, Data, End).
+
+continuation_frame_raw(StreamIdent, Data, End) -->
+    int24(Length), [0x9],
+    { delay(length(Data, Length)),
       if_(End = true, Flags #= 0x4,
           (End = false, Flags #= 0x0)) },
     [Flags], int31(StreamIdent),
     Data.
+
+% only going to work in the serializing mode
+header_frames(StreamIdent, MaxSize, Headers, TableSize0-Table0-TableSize2-Table2, Options) -->
+    { phrase(hpack_max(MaxSize, Headers, TableSize0-Table0-TableSize1-Table1, Leftover, 0), Data),
+      (Leftover = []
+      -> End = true
+      ;  End = false) },
+    header_frame_raw(StreamIdent, Data, [end_headers(End)|Options]),
+    continue_frames(MaxSize, StreamIdent, Leftover, TableSize1-Table1-TableSize2-Table2).
+
+continue_frames(_, _, [], TableSize-Table-TableSize-Table) --> [].
+continue_frames(MaxSize, StreamIdent, Headers, TableSize0-Table0-TableSize2-Table2) -->
+   { phrase(hpack_max(MaxSize, Headers, TableSize0-Table0-TableSize1-Table1, Leftover, 0), Data),
+      (Leftover = []
+      -> End = true
+      ;  End = false) },
+   continuation_frame_raw(StreamIdent, Data, End),
+   continue_frames(MaxSize, StreamIdent, TableSize1-Table1-TableSize2-Table2).
+
 
 % Helper predicates
 
