@@ -45,7 +45,7 @@ frame(Type, Flags, Ident, Payload) -->
     Payload.
 
 % https://httpwg.org/specs/rfc7540.html#FrameTypes
-% TODO: need to ensure that each frame is less than
+% [TODO] need to ensure that each frame is less than
 % SETTINGS_MAX_FRAME_SIZE
 % (default 2^14 octets)
 

@@ -133,8 +133,8 @@ test('Unpack headers priority') :-
     StreamDep = 0x50,
     Weight = 69.
 
-% TODO: tests for priority frame
-% TODO: tests for rst frame
+% [TODO] tests for priority frame
+% [TODO] tests for rst frame
 
 test('Pack settings frame') :-
     phrase(settings_frame([header_table_size-10, max_frame_size-0x2345]),

@@ -32,7 +32,7 @@ connection_preface(`PRI * HTTP/2.0\r\n\r\nSM\r\n\r\n`).
 
 default_complete_cb(Headers, _Body) :-
     debug(http2_client(open), "Complete without callback set ~w", [Headers]).
-% TODO: store state of connection, to determine what's valid to recieve/send
+% [TODO] store state of connection, to determine what's valid to recieve/send
 :- record http2_stream(headers=[],
                        data=[],
                        done=false,
@@ -203,7 +203,7 @@ send_request_headers(Headers_, Ident, EndStream, State0, State1) :-
     wrapped_headers(Table0, Headers_, Headers),
     http2_state_send_header_table_size(State0, TableSize),
     http2_state_stream(State0, Stream),
-    % TODO: check size of header frame & split into header +
+    % [TODO] check size of header frame & split into header +
     % continuation if too large
     send_frame(Stream,
                header_frame(Ident, Headers, TableSize-Table0-TableSize1-Table1,
@@ -319,7 +319,7 @@ handle_frame(0x4, _, State0, In, State1) :- % settings frame
                             recv_header_table(NewTable),
                             recv_header_table_size(NewTableSize)],
                            State0, State1),
-    % TODO: validate new size
+    % [TODO] validate new size
     % send ACK
     http2_state_stream(State1, Stream),
     send_frame(Stream, settings_ack_frame), flush_output(Stream).
@@ -356,7 +356,7 @@ handle_frame(0x7, _, State0, In, State0) :- % goaway frame
 handle_frame(0x8, _, State0, In, State0) :- % window frame
     phrase(window_update_frame(Ident, Increment), In), !,
     debug(http2_client(response), "window frame ~w ~w", [Ident, Increment]),
-    % TODO: update flow control state for the stream
+    % [TODO] update flow control state for the stream
     true.
 handle_frame(0x9, Ident, State0, In, State3) :- % continuation frame
     http2_state_recv_header_table(State0, HeaderTable0),
