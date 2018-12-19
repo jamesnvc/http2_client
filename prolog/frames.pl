@@ -8,7 +8,9 @@
                    ping_frame//2,
                    goaway_frame//3,
                    window_update_frame//2,
-                   continuation_frame//3]).
+                   continuation_frame//3,
+                   header_frames//5
+                  ]).
 /** <module> DCGs for parsing HTTP/2 frames
 
 @author James Cash
@@ -20,7 +22,7 @@
 :- use_module(library(predicate_options)).
 :- use_module(library(delay), [delay/1]).
 :- use_module(library(list_util), [replicate/3]).
-:- use_module(hpack, [hpack/7]).
+:- use_module(hpack, [hpack/7, hpack_max//5]).
 :- use_module(reif).
 
 /*
@@ -399,7 +401,7 @@ continuation_frame_raw(StreamIdent, Data, End) -->
     Data.
 
 % only going to work in the serializing mode
-header_frames(StreamIdent, MaxSize, Headers, TableSize0-Table0-TableSize2-Table2, Options) -->
+header_frames(MaxSize, StreamIdent, Headers, TableSize0-Table0-TableSize2-Table2, Options) -->
     { phrase(hpack_max(MaxSize, Headers, TableSize0-Table0-TableSize1-Table1, Leftover, 0), Data),
       (Leftover = []
       -> End = true
@@ -407,14 +409,14 @@ header_frames(StreamIdent, MaxSize, Headers, TableSize0-Table0-TableSize2-Table2
     header_frame_raw(StreamIdent, Data, [end_headers(End)|Options]),
     continue_frames(MaxSize, StreamIdent, Leftover, TableSize1-Table1-TableSize2-Table2).
 
-continue_frames(_, _, [], TableSize-Table-TableSize-Table) --> [].
+continue_frames(_, _, [], TableSize-Table-TableSize-Table) --> !.
 continue_frames(MaxSize, StreamIdent, Headers, TableSize0-Table0-TableSize2-Table2) -->
    { phrase(hpack_max(MaxSize, Headers, TableSize0-Table0-TableSize1-Table1, Leftover, 0), Data),
-      (Leftover = []
-      -> End = true
-      ;  End = false) },
+     (Leftover = []
+     -> End = true
+     ;  End = false) },
    continuation_frame_raw(StreamIdent, Data, End),
-   continue_frames(MaxSize, StreamIdent, TableSize1-Table1-TableSize2-Table2).
+   continue_frames(MaxSize, StreamIdent, Leftover, TableSize1-Table1-TableSize2-Table2).
 
 
 % Helper predicates

@@ -26,8 +26,7 @@ test('Pack data fram with padding') :-
 
 test('Unpack data without padding') :-
     Cs = [0,0,11,0,1,0,0,48,57,72,101,108,108,111,32,119,111,114,108,100],
-    phrase(data_frame(Stream, Data,
-                                   [padded(Padding), end_stream(End)]),
+    phrase(data_frame(Stream, Data, [padded(Padding), end_stream(End)]),
            Cs),
     Stream = 12345,
     Data = `Hello world`,
@@ -244,6 +243,25 @@ test('Pack continuation frame') :-
     Bytes = [0,0,20,9,0,0,0,4,210,130,132,64,9,115,111,109,101,116,104,105,110,
              103,6,102,111,111,98,97,114].
 
+test('Pack continuation end frame') :-
+    Headers = 4096-[]-4096-_Tbl-[indexed(':method'-'GET'),
+                                 indexed(':path'-'/'),
+                                 literal_inc('something'-'foobar')],
+    phrase(continuation_frame(1234, Headers, true), Bytes),
+    ground(Bytes),
+    Bytes = [0,0,20,9,4,0,0,4,210,130,132,64,9,115,111,109,101,116,104,105,110,
+             103,6,102,111,111,98,97,114].
+
+test('Unpack continuation frame') :-
+    Bytes = [0,0,20,9,4,0,0,4,210,130,132,64,9,115,111,109,101,116,104,105,110,
+             103,6,102,111,111,98,97,114],
+    phrase(continuation_frame(1234, 4096-[]-4096-_Tbl-Headers, End), Bytes),
+    maplist(ground, [Headers, End]),
+    End = true,
+    Headers = [indexed(':method'-'GET'),
+               indexed(':path'-'/'),
+               literal_inc('something'-'foobar')].
+
 test('unpacking header') :-
     % 1 4 5
     Bytes = [0, 0x01, 0xe9,
@@ -336,5 +354,63 @@ test('unpack header with size change') :-
                indexed(':path'-'/'),
                literal_inc(':authority'-'www.example.com')],
     SizeOut = 0, TableOut = [].
+
+test('Pack headers across multiple frames') :-
+    phrase(header_frames(100, 123,
+                         [indexed(':method'-'GET'),
+                          indexed(':scheme'-'http'),
+                          indexed(':path'-'/'),
+                          literal_inc(':authority'-'www.example.com'),
+                          literal_never(push-'true'),
+                          literal_never('strict-transport-security'-'max-age=31536000 ; includeSubDomains'),
+                          literal_never('access-control-allow-origin'-'*'),
+                          literal_never('access-control-allow-methods'-'GET,HEAD,POST'),
+                          literal_never('access-control-allow-headers'-'*'),
+                          literal_never('access-control-max-age'-'86400'),
+                          literal_never('access-control-allow-credentials'-'false'),
+                          literal_never('protocol_negotiation'-h2),
+                          literal_never(myproto-h2),
+                          literal_never(rtt-'3')],
+                         4096-[]-_SizeOut-_TableOut,
+                         [padded(0), end_stream(true)]),
+           Bytes),
+    ground(Bytes),
+    phrase(header_frame(123, Headers1, 4096-[]-4096-Table1, [padded(0),
+                                                            end_stream(EndS),
+                                                            end_headers(EndH)]),
+           Bytes, Bytes1),
+    maplist(ground, [Table1, Headers1, EndS, EndH]),
+    Headers1 = [indexed(':method'-'GET'),
+                indexed(':scheme'-'http'),
+                indexed(':path'-'/'),
+                literal_inc(':authority'-'www.example.com'),
+                literal_never(push-'true'),
+                literal_never('strict-transport-security'-'max-age=31536000 ; includeSubDomains'),
+                literal_never('access-control-allow-origin'-'*')],
+    EndS = true,
+    EndH = false,
+
+    phrase(continuation_frame(123, (4096-Table1-4096-Table2)-Headers2, End1),
+           Bytes1, Bytes2),
+    maplist(ground, [Table2, Headers2, End1]),
+    End1 = false,
+    Headers2 = [literal_never('access-control-allow-methods'-'GET,HEAD,POST'),
+                literal_never('access-control-allow-headers'-'*')],
+
+    phrase(continuation_frame(123, (4096-Table2-4096-Table3)-Headers3, End2),
+           Bytes2, Bytes3),
+    maplist(ground, [Table3, Headers3, End2]),
+    End2 = false,
+    Headers3 = [literal_never('access-control-max-age'-'86400'),
+                literal_never('access-control-allow-credentials'-'false'),
+                literal_never('protocol_negotiation'-h2)],
+
+    phrase(continuation_frame(123, (4096-Table3-4096-Table4)-Headers4, End3),
+           Bytes3),
+    maplist(ground, [Table4, Headers4, End3]),
+    End3 = true,
+    Headers4 = [literal_never(myproto-h2),
+                literal_never(rtt-'3')].
+
 
 :- end_tests(frames).
