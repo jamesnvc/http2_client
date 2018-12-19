@@ -355,6 +355,14 @@ test('unpack header with size change') :-
                literal_inc(':authority'-'www.example.com')],
     SizeOut = 0, TableOut = [].
 
+test('simple pack headers') :-
+    Headers = [indexed(':method'-'GET'),
+               indexed(':scheme'-'http'),
+               indexed(':path'-'/')],
+    phrase(header_frames(999999, 12345, Headers, 4096-[]-4096-_Table, []), Bytes),
+    ground(Bytes),
+    Bytes = [0,0,3,1,4,0,0,48,57,130,134,132].
+
 test('Pack headers across multiple frames') :-
     phrase(header_frames(100, 123,
                          [indexed(':method'-'GET'),
