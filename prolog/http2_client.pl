@@ -203,11 +203,12 @@ send_request_headers(Headers_, Ident, EndStream, State0, State1) :-
     wrapped_headers(Table0, Headers_, Headers),
     http2_state_send_header_table_size(State0, TableSize),
     http2_state_stream(State0, Stream),
-    % [TODO] check size of header frame & split into header +
-    % continuation if too large
+    http2_state_settings(State0, Settings),
+    MaxSize = Settings.max_frame_size,
     send_frame(Stream,
-               header_frame(Ident, Headers, TableSize-Table0-TableSize1-Table1,
-                            [end_headers(true), end_stream(EndStream)])),
+               header_frames(MaxSize,
+                             Ident, Headers, TableSize-Table0-TableSize1-Table1,
+                             [end_headers(true), end_stream(EndStream)])),
     debug(http2_client(request), "Sent headers", []),
     set_http2_state_fields(
         [send_header_table(Table1),
