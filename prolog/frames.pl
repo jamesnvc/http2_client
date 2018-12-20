@@ -149,8 +149,6 @@ data_frame(StreamIdent, Data, Options) -->
 %  @bug Technically, I think having a padding of zero is allowed, but
 %        currently that isn't representable
 %  @tbd Support for stream-priority flag
-%  @tbd Headers need to fit in a particular size, or needs to use
-%        CONTINUATION frames.
 header_frame(StreamIdent, Headers, Size-Table0-SizeOut-Table1, Options) -->
     { % dumb that we have to call phrase/2 inside a DCG, but we need
       % to know the length of the output & I'm not sure how else to do
