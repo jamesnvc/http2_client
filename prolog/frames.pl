@@ -390,7 +390,7 @@ window_update_frame(StreamIdent, Increment) -->
 continuation_frame(StreamIdent, (Size-Tbl0-SizeOut-Tbl1)-Headers, End) -->
     { when(nonvar(Headers);ground(Data),
            phrase(hpack(Headers, Size, SizeOut, Tbl0, Tbl1), Data)) },
-    continuation_frame_raw(StreamIdent, Data, End).
+    continuation_frame_raw(StreamIdent, Data, End), !.
 
 continuation_frame_raw(StreamIdent, Data, End) -->
     int24(Length), [0x9],
