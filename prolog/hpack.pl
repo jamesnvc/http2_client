@@ -1,4 +1,5 @@
 :- module(hpack, [hpack/7,
+                  hpack_max//5,
                   lookup_header/3]).
 /** <module> HPACK, library for parsing RFC 7541 HPACK headers
 
@@ -169,3 +170,13 @@ header(size_update(Size)) -->> dynamic_size_update(Size).
 hpack([Header|Headers]) -->>
     header(Header), !, hpack(Headers).
 hpack([]) -->> [].
+
+%! hpack_max(+MaxSize:integer, +Headers:list, ?TableInfo, -Leftover, -Size)//
+%  like hpack, but maintain a maximum size for the header tables
+hpack_max(Max, [Header|Headers], SizeIn-TableIn-SizeOut-TableOut, Leftover, BytesL) -->
+    { phrase(hpack([Header], SizeIn, Size1, TableIn, Table1), HBs),
+      length(HBs, HBL), NextL is BytesL + HBL,
+      Max >= NextL, ! },
+    HBs,
+    hpack_max(Max, Headers, Size1-Table1-SizeOut-TableOut, Leftover, NextL).
+hpack_max(_, Headers, S-T-S-T, Headers, _) --> [].
