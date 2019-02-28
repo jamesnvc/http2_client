@@ -1,0 +1,14 @@
+* New Architecture
+  Based around how ~http_open/3~ works with keep-alive.
+
+  Keep a pool of connections for the given host & port; each call to put/post/whatever checks if there's already a connection & re-uses that state.
+
+  I guess still allow setting headers to control caching?
+
+  Do we still have a worker thread?
+
+  Maybe have an option to either synchronously wait for the given request to finish or give a hook to run async?
+
+  Have the request thing return a fake stream & the client worker thread keeps a map of HTTP2 stream id to Prolog stream & can just write the decoded data as it goes?
+
+  I think compatibility with the ~http_open~ API would require it to be blocking per request though, to fill out the headers at least.
