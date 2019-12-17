@@ -71,7 +71,7 @@ default_close_cb(Data) :-
 http2_open(URL, Http2Ctx, Options) :-
     % Open TLS connection
     parse_url(URL, [protocol(https),host(Host)|Attrs]),
-    (memberchk(port(Port), Attrs) ; Port = 443), !,
+    ( memberchk(port(Port), Attrs) ; Port = 443 ), !,
     debug(http2_client(open), "URL ~w -> Host ~w:~w", [URL, Host, Port]),
     ssl_context(client, Ctx, [host(Host),
                               close_parent(true),
@@ -95,7 +95,7 @@ http2_open(URL, Http2Ctx, Options) :-
     send_frame(Stream, settings_frame([enable_push-0])),
     flush_output(Stream),
     % XXX: ...then we read a SETTINGS from from server & ACK it
-    (memberchk(close_cb(CloseCb), Options), ! ; CloseCb = default_close_cb),
+    ( memberchk(close_cb(CloseCb), Options), ! ; CloseCb = default_close_cb ),
     make_http2_state([authority(Host),
                       stream(Stream),
                       close_cb(CloseCb)],
