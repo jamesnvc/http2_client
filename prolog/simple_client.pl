@@ -1,5 +1,8 @@
 :- module(simple_client, [http2_simple_open/3]).
 
+:- use_module(library(apply_macros)).
+:- use_module(library(apply), [convlist/3,
+                               maplist/3]).
 :- use_module(http2_client, [http2_close/1,
                              http2_open/3,
                              http2_request/4]).
@@ -44,17 +47,14 @@ canonical_header(Header, CanonicalHeader) :-
     re_replace("-"/g, "_", HeaderLower, CanonicalHeader).
 
 extract_headers(Options, Headers) :-
-    bagof(CKey-Value,
-          Key^( member(header(Key, Value), Options),
-            canonical_header(Key, CKey) ),
-         WantHeaders),
-    maplist({Headers}/[CKey-Value]>>(
-                ( member(Header-V, Headers),
-                  canonical_header(Header, CKey),
-                  Value = V
-                ) ; Value = ''
-            ),
-            WantHeaders).
+    convlist({Headers}/[header(Key, Value), _]>>(
+                 ( canonical_header(Key, CKey),
+                   member(Header-V, Headers),
+                   canonical_header(Header, CKey),
+                   Value = V
+                 ) ; Value = ''
+             ),
+             Options, _).
 
 build_options(_OpenOptions, []).
 
