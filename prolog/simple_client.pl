@@ -108,31 +108,34 @@ http2_simple_close(_).
 % Sample usage
 test :-
     debug(xxx),
-    http2_simple_open('https://nghttp2.org/httpbin/ip',
+    http2_simple_open('https://occasionallycogent.com/entries.html',
                       Stream,
                       [headers(Headers),
                        header('Content-Length', ContentLen),
                        header(x_frame_options, FrameOpts),
-                       header(some_other_thing, Nope)
+                       header(some_other_thing, Nope),
+                       status_code(Status),
+                       size(Size)
                       ]),
-    read_string(Stream, _, Body),
+    read_string(Stream, 50, Body),
     debug(xxx, "body ~w", [Body]),
+    debug(xxx, "Status code ~w", [Status]),
     debug(xxx, "response headers ~w", [Headers]),
     debug(xxx, "Frame opts ~w", [FrameOpts]),
-    debug(xxx, "content len ~w", [ContentLen]),
+    debug(xxx, "content len ~w (= ~w)", [ContentLen, Size]),
     debug(xxx, "nonexistant header ~k", [Nope]),
     close(Stream),
 
     % reusing the same connection
-    http2_simple_open('https://nghttp2.org/httpbin/headers', Stream2, []),
-    read_string(Stream2, _, Body2),
-    close(Body2),
-    debug(xxx, "headers body ~w", [Body2]),
+    http2_simple_open('https://occasionallycogent.com/index.html', Stream2, []),
+    read_string(Stream2, 50, Body2),
+    close(Stream2),
+    debug(xxx, "index body ~w", [Body2]),
 
     % reusing the same connection
-    http2_simple_open('https://nghttp2.org/httpbin/get', Stream3, []),
-    read_string(Stream3, _, Body3),
-    close(Body3),
-    debug(xxx, "get body ~w", [Body3]),
+    http2_simple_open('https://occasionallycogent.com/about.html', Stream3, []),
+    read_string(Stream3, 50, Body3),
+    close(Stream3),
+    debug(xxx, "about body ~w", [Body3]),
 
     http2_simple_close('https://nghttp2.org').
