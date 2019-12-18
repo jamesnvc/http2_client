@@ -7,6 +7,8 @@
 :- use_module(library(url), [parse_url/2]).
 :- use_module(library(pcre), [re_replace/4]).
 
+:- dynamic existing_url_context/2.
+
 unwrap_header(Wrapped, Unwrapped) :-
     Wrapped =.. [_, Unwrapped].
 
@@ -16,7 +18,9 @@ simple_complete_cb(ThreadId, OutStream, WrappedHeaders, Body) :-
     maplist(unwrap_header, WrappedHeaders, Headers),
     thread_send_message(ThreadId, finished(Headers)).
 
-close_cb(_Ctx, _Data) :- true.
+close_cb(BaseURL, _Ctx, _Data) :-
+    debug(xxx, "Closing ~w", [BaseURL]),
+    retractall(existing_url_context(BaseURL, _)).
 
 url_base_path(URL, Base, Path) :-
     parse_url(URL, [protocol(Proto), host(Host)|URLAttrs]),
@@ -54,10 +58,18 @@ extract_headers(Options, Headers) :-
 
 build_options(_OpenOptions, []).
 
+url_context(BaseURL, Ctx) :-
+    existing_url_context(BaseURL, Ctx), !.
+url_context(BaseURL, Ctx) :-
+    debug(xxx, "Opening new connection ~w", [BaseURL]),
+    http2_open(BaseURL, Ctx, [close_cb(simple_client:close_cb(BaseURL, Ctx))]),
+    assertz(existing_url_context(BaseURL, Ctx)).
+
 http2_simple_open(URL, Read, Options) :-
     url_base_path(URL, BaseURL, Path),
-    % [TODO] keep conn open, cache?
-    http2_open(BaseURL, Ctx, [close_cb(simple_client:close_cb(Ctx))]),
+
+    url_context(BaseURL, Ctx),
+
     pipe(Read, Write),
 
     ( memberchk(method(Meth), Options) ; Meth = get ),
@@ -71,8 +83,13 @@ http2_simple_open(URL, Read, Options) :-
                   [],
                   simple_complete_cb(ThisId, Write)),
     thread_get_message(finished(RespHeaders)),
-    http2_close(Ctx), % [TODO]
     extract_headers(Options, RespHeaders).
+
+http2_simple_close(URL) :-
+    url_base_path(URL, Base, _),
+    existing_url_context(Base, Ctx), !,
+    http2_close(Ctx).
+http2_simple_close(_).
 
 test :-
     debug(xxx),
