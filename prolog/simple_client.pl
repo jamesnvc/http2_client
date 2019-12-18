@@ -47,16 +47,28 @@ canonical_header(Header, CanonicalHeader) :-
     re_replace("-"/g, "_", HeaderLower, CanonicalHeader).
 
 extract_headers(Options, Headers) :-
-    convlist({Headers}/[header(Key, Value), _]>>(
-                 ( canonical_header(Key, CKey),
-                   member(Header-V, Headers),
-                   canonical_header(Header, CKey),
-                   Value = V
-                 ) ; Value = ''
-             ),
-             Options, _).
+    convlist(extract_header(Headers), Options, _).
 
-build_options(_OpenOptions, []).
+extract_header(Headers, header(Key, Value), _) :-
+     canonical_header(Key, CKey),
+     member(Header-V, Headers),
+     canonical_header(Header, CKey), !,
+     Value = V.
+extract_header(_Headers, header(_, Value), _) :-
+    Value = ''.
+extract_header(Headers, status_code(Code), _) :-
+    memberchk(':status'-Code, Headers).
+extract_header(Headers, size(Size), _) :-
+    member(Header-V, Headers),
+    canonical_header(Header, "content_length"),
+    V = Size.
+extract_header(_, version(2), _).
+
+options_headers(OpenOptions, Headers) :-
+    convlist(option_header, OpenOptions, Headers).
+
+option_header(user_agent(Agent), 'user-agent'-Agent).
+option_header(request_header(Name=Value), Name-Value).
 
 url_context(BaseURL, Ctx) :-
     existing_url_context(BaseURL, Ctx), !.
@@ -77,10 +89,12 @@ http2_simple_open(URL, Read, Options) :-
     string_upper(Meth, Method),
     thread_self(ThisId),
 
-    build_options(Options, Opts),
+    options_headers(Options, Headers),
 
-    http2_request(Ctx, [':method'-Method, ':path'-Path|Opts],
-                  [],
+    ( memberchk(post(Data), Options) ; Data = [] ),
+
+    http2_request(Ctx, [':method'-Method, ':path'-Path|Headers],
+                  Data,
                   simple_complete_cb(ThisId, Write)),
     thread_get_message(finished(RespHeaders)),
     extract_headers(Options, RespHeaders).
