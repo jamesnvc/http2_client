@@ -91,6 +91,7 @@ http2_simple_close(URL) :-
     http2_close(Ctx).
 http2_simple_close(_).
 
+% Sample usage
 test :-
     debug(xxx),
     http2_simple_open('https://nghttp2.org/httpbin/ip',
@@ -107,5 +108,17 @@ test :-
     debug(xxx, "content len ~w", [ContentLen]),
     debug(xxx, "nonexistant header ~k", [Nope]),
     close(Stream),
-    %% http2_close(Ctx).
-    true.
+
+    % reusing the same connection
+    http2_simple_open('https://nghttp2.org/httpbin/headers', Stream2, []),
+    read_string(Stream2, _, Body2),
+    close(Body2),
+    debug(xxx, "headers body ~w", [Body2]),
+
+    % reusing the same connection
+    http2_simple_open('https://nghttp2.org/httpbin/get', Stream3, []),
+    read_string(Stream3, _, Body3),
+    close(Body3),
+    debug(xxx, "get body ~w", [Body3]),
+
+    http2_simple_close('https://nghttp2.org').
